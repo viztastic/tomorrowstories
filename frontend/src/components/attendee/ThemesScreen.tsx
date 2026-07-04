@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Theme, VideoDTO } from "../../types";
-import { FONT_DISPLAY, MUTED, pairFor } from "../../design";
+import { FONT_DISPLAY, INK, MUTED, ON_ACCENT, pairFor } from "../../design";
 
 function followStyle(on: boolean): CSSProperties {
   return {
@@ -11,8 +11,8 @@ function followStyle(on: boolean): CSSProperties {
     cursor: "pointer",
     fontFamily: "inherit",
     border: "none",
-    background: on ? "#0C0A12" : "rgba(255,255,255,.92)",
-    color: on ? "#F4F1EC" : "#0C0A12",
+    background: on ? ON_ACCENT : "rgba(255,255,255,.92)",
+    color: on ? INK : ON_ACCENT,
   };
 }
 

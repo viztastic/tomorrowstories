@@ -17,7 +17,8 @@ export interface EventItem {
   eventId: string;
   code: string; // short human-friendly display code
   name: string;
-  themes: Theme[];
+  themes: Theme[]; // topic buckets attendees choose from
+  palette?: string; // visual palette id (color skin); undefined = default. See config.PALETTE_IDS
   createdAt: string;
   creatorIp?: string; // source IP that created the event (admin-only)
 }
@@ -47,6 +48,7 @@ export interface EventDTO {
   code: string;
   name: string;
   themes: Theme[];
+  palette: string; // visual palette id (always resolved to a concrete id in the DTO)
   attendeeUrl: string;
   bigScreenUrl: string;
   createdAt: string;

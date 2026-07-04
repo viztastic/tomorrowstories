@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
-import { config, DEFAULT_THEMES } from "./shared/config.js";
+import { config, DEFAULT_THEMES, DEFAULT_PALETTE_ID, PALETTE_IDS } from "./shared/config.js";
 import {
   getEvent,
   putEvent,
@@ -13,8 +13,10 @@ import {
   getEventIdByCode,
   listAllEvents,
   deleteEvent,
+  updateEvent,
 } from "./shared/db.js";
 import { newEventCode, newEventId, newVideoId } from "./shared/ids.js";
+import { normalizeThemes } from "./shared/themes.js";
 import { eventToDTO, videoToDTO } from "./shared/dto.js";
 import { badRequest, created, HttpError, json, notFound, ok, serverError } from "./shared/http.js";
 import type { EventItem, VideoItem } from "./shared/types.js";
@@ -60,6 +62,10 @@ export async function handler(
       if (method === "DELETE" && !p.videoId && event.rawPath.endsWith(`/events/${p.eventId}`)) {
         return await deleteEventRoute(p.eventId, event);
       }
+      // PATCH /events/{eventId}  (organizer: edit name / palette / topic buckets)
+      if (method === "PATCH" && !p.videoId && event.rawPath.endsWith(`/events/${p.eventId}`)) {
+        return await patchEventRoute(p.eventId, event);
+      }
       // POST /events/{eventId}/uploads
       if (method === "POST" && event.rawPath.endsWith("/uploads")) {
         return await createUpload(p.eventId, event);
@@ -96,6 +102,11 @@ async function createEvent(event: APIGatewayProxyEventV2): Promise<APIGatewayPro
   const name = String(body.name ?? "").trim() || "Tomorrow Stories";
   const eventId = newEventId();
 
+  // Custom topic buckets are optional — an organizer who doesn't customize gets
+  // the default set. normalizeThemes throws a 400 on a malformed custom array.
+  const themes = body.themes === undefined ? DEFAULT_THEMES : normalizeThemes(body.themes);
+  const palette = PALETTE_IDS.includes(String(body.palette)) ? String(body.palette) : DEFAULT_PALETTE_ID;
+
   // Pick a short code that isn't already taken (collisions are astronomically
   // rare over 32^6, but check a few times to be safe).
   let code = newEventCode();
@@ -110,13 +121,66 @@ async function createEvent(event: APIGatewayProxyEventV2): Promise<APIGatewayPro
     eventId,
     code,
     name: name.slice(0, 80),
-    themes: DEFAULT_THEMES,
+    themes,
+    palette,
     createdAt: new Date().toISOString(),
     creatorIp: event.requestContext.http.sourceIp,
   };
   await putEvent(item);
   await putCodeMapping(code, eventId);
   return created(eventToDTO(item));
+}
+
+/**
+ * Edit an event's mutable settings: name, visual palette, and topic buckets.
+ * Guarded by the shared admin secret today; in the auth phase this single call
+ * site swaps to an organizer-ownership check. Removing a topic that still has
+ * clips is rejected so those clips never orphan.
+ */
+async function patchEventRoute(
+  eventId: string,
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
+  requireAdmin(event);
+  const e = await getEvent(eventId);
+  if (!e) return notFound("Event not found");
+
+  const body = parseBody(event);
+  const patch: { name?: string; palette?: string; themes?: EventItem["themes"] } = {};
+
+  if (body.name !== undefined) {
+    const name = String(body.name).trim();
+    if (!name) return badRequest("Event name cannot be empty");
+    patch.name = name.slice(0, 80);
+  }
+
+  if (body.palette !== undefined) {
+    if (!PALETTE_IDS.includes(String(body.palette))) return badRequest("Unknown palette");
+    patch.palette = String(body.palette);
+  }
+
+  if (body.themes !== undefined) {
+    const themes = normalizeThemes(body.themes);
+    // Guard against orphaning clips: a topic id that still has videos can't be
+    // removed. Renames/recolors keep the id (see normalizeThemes) so they pass.
+    const keptIds = new Set(themes.map((t) => t.id));
+    const removed = e.themes.filter((t) => !keptIds.has(t.id));
+    if (removed.length) {
+      const videos = await listVideos(eventId);
+      for (const t of removed) {
+        const count = videos.filter((v) => v.theme === t.id).length;
+        if (count > 0) {
+          return badRequest(`Topic “${t.name}” still has ${count} ${count === 1 ? "story" : "stories"} — reassign or keep it`);
+        }
+      }
+    }
+    patch.themes = themes;
+  }
+
+  if (Object.keys(patch).length === 0) return badRequest("Nothing to update");
+
+  const updated = await updateEvent(eventId, patch);
+  return ok(eventToDTO(updated, { admin: true }));
 }
 
 async function joinByCode(code: string): Promise<APIGatewayProxyResultV2> {

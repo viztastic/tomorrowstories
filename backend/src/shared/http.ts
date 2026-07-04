@@ -2,8 +2,8 @@ import type { APIGatewayProxyResultV2 } from "aws-lambda";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "content-type, x-admin-key",
+  "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
 };
 
 export function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {

@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import type { CSSProperties } from "react";
 import type { LocalComment } from "../../types";
 import { api } from "../../api";
-import { ACCENT, BRAND_GRAD, FONT_DISPLAY, INK, MUTED, MUTED2, themeById } from "../../design";
+import { ACCENT, BRAND_GRAD, FONT_DISPLAY, INK, MUTED, MUTED2, ON_ACCENT, OVERLAY_BG, PAGE_BG, themeById } from "../../design";
+import { PaletteProvider } from "../../PaletteProvider";
 import { Spinner } from "../common";
 import { useEventData } from "../../useEventData";
 import { useMediaQuery } from "../../useMediaQuery";
@@ -97,6 +98,7 @@ export function Attendee({ eventId }: { eventId: string }) {
   const openVideo = (id: string) => { setSel(id); setScreen("video"); };
 
   return (
+    <PaletteProvider paletteId={data.event.palette}>
     <div style={pageShell}>
       {/* ---- sticky header ---- */}
       <header style={headerStyle}>
@@ -183,6 +185,7 @@ export function Attendee({ eventId }: { eventId: string }) {
         </Overlay>
       )}
     </div>
+    </PaletteProvider>
   );
 }
 
@@ -193,14 +196,14 @@ function Shell({ children }: { children: React.ReactNode }) {
 function Overlay({ isMobile, children }: { isMobile: boolean; children: React.ReactNode }) {
   if (isMobile) {
     return (
-      <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "#0B0812", display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" }}>
+      <div style={{ position: "fixed", inset: 0, zIndex: 50, background: OVERLAY_BG, display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" }}>
         {children}
       </div>
     );
   }
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(4,3,10,.72)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ width: "100%", maxWidth: 440, height: "min(880px, 92vh)", background: "#0B0812", borderRadius: 28, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 40px 120px -30px #000, 0 0 0 1px rgba(255,255,255,.06)" }}>
+      <div style={{ width: "100%", maxWidth: 440, height: "min(880px, 92vh)", background: OVERLAY_BG, borderRadius: 28, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 40px 120px -30px #000, 0 0 0 1px rgba(255,255,255,.06)" }}>
         {children}
       </div>
     </div>
@@ -211,7 +214,7 @@ function HeaderTab({ label, active, onClick }: { label: string; active: boolean;
   return (
     <button
       onClick={onClick}
-      style={{ padding: "8px 14px", borderRadius: 999, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 14, color: active ? "#0C0A12" : "#C9C6D4", background: active ? "#F4F1EC" : "transparent" }}
+      style={{ padding: "8px 14px", borderRadius: 999, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 14, color: active ? ON_ACCENT : "#C9C6D4", background: active ? INK : "transparent" }}
     >
       {label}
     </button>
@@ -229,7 +232,7 @@ function NavBtn({ label, active, onClick, children }: { label: string; active: b
 
 const pageShell: CSSProperties = {
   minHeight: "100dvh",
-  background: "radial-gradient(1300px 740px at 50% -8%, #223159, #0C1024 60%)",
+  background: PAGE_BG,
   backgroundAttachment: "fixed",
   color: INK,
   display: "flex",

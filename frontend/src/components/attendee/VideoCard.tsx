@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Theme, VideoDTO } from "../../types";
-import { fmtLikes, initials, pairFor, stillBg } from "../../design";
+import { fmtLikes, initials, INK, ON_ACCENT, pairFor, stillBg } from "../../design";
 import { Grain, PlayBadge, Spinner } from "../common";
 
 /**
@@ -182,7 +182,7 @@ export function VideoCard({
         {fmtDurShort(video.durationSec)}
       </div>
       {mine && (
-        <div style={{ position: "absolute", top: 9, left: 9, background: "#F4F1EC", color: "#0C0A12", padding: "3px 8px", borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: ".03em" }}>
+        <div style={{ position: "absolute", top: 9, left: 9, background: INK, color: ON_ACCENT, padding: "3px 8px", borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: ".03em" }}>
           YOURS
         </div>
       )}

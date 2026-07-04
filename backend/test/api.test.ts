@@ -57,6 +57,79 @@ describe("POST /events", () => {
   });
 });
 
+describe("POST /events with custom topics + palette", () => {
+  it("stores normalized custom topics and the chosen palette", async () => {
+    ddb.on(GetCommand).resolves({}); // code not taken
+    const puts: any[] = [];
+    ddb.on(PutCommand).callsFake((input) => { puts.push(input); return {}; });
+
+    const { status, body } = parse(
+      await handler(
+        ev("POST", "/events", {
+          body: { name: "E", palette: "rally", themes: [{ name: "Big Ideas", color: "#112233" }] },
+        })
+      )
+    );
+    expect(status).toBe(201);
+    expect(body.palette).toBe("rally");
+    expect(body.themes).toEqual([{ id: "big-ideas", name: "Big Ideas", color: "#112233" }]);
+  });
+
+  it("falls back to defaults when palette is unknown and themes are omitted", async () => {
+    ddb.on(GetCommand).resolves({});
+    ddb.on(PutCommand).resolves({});
+    const { body } = parse(await handler(ev("POST", "/events", { body: { name: "E", palette: "bogus" } })));
+    expect(body.palette).toBe("aurora");
+    expect(body.themes.length).toBe(6);
+  });
+});
+
+describe("PATCH /events/{id}", () => {
+  it("401s without the admin key", async () => {
+    const { status } = parse(
+      await handler(ev("PATCH", "/events/abc", { path: { eventId: "abc" }, headers: { "x-admin-key": "nope" }, body: { palette: "marine" } }))
+    );
+    expect(status).toBe(401);
+  });
+
+  it("updates palette + topics for an existing event", async () => {
+    ddb.on(GetCommand).resolves({ Item: THEME_EVENT });
+    ddb.on(QueryCommand).resolves({ Items: [] }); // no videos → removal allowed
+    ddb.on(UpdateCommand).resolves({
+      Attributes: { ...THEME_EVENT, palette: "marine", themes: [{ id: "new", name: "New", color: "#123456" }] },
+    });
+    const { status, body } = parse(
+      await handler(
+        ev("PATCH", "/events/abc", {
+          path: { eventId: "abc" },
+          headers: { "x-admin-key": "s3cr3t-admin-key" },
+          body: { palette: "marine", themes: [{ name: "New", color: "#123456" }] },
+        })
+      )
+    );
+    expect(status).toBe(200);
+    expect(body.palette).toBe("marine");
+  });
+
+  it("rejects removing a topic that still has videos", async () => {
+    ddb.on(GetCommand).resolves({ Item: THEME_EVENT }); // has topic "human"
+    ddb.on(QueryCommand).resolves({
+      Items: [{ eventId: "abc", videoId: "v1", theme: "human", title: "A", author: "M", status: "live", durationSec: 5, likes: 0, rawKey: "r", createdAt: "2026-07-01T00:00:00Z" }],
+    });
+    const { status, body } = parse(
+      await handler(
+        ev("PATCH", "/events/abc", {
+          path: { eventId: "abc" },
+          headers: { "x-admin-key": "s3cr3t-admin-key" },
+          body: { themes: [{ name: "Something Else", color: "#123456" }] }, // drops "human"
+        })
+      )
+    );
+    expect(status).toBe(400);
+    expect(body.error).toMatch(/still has/i);
+  });
+});
+
 describe("GET /join/{code}", () => {
   it("resolves a known code to its eventId", async () => {
     ddb.on(GetCommand).resolves({ Item: { eventId: "abc" } });

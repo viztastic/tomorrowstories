@@ -19,6 +19,14 @@ describe("eventToDTO", () => {
     expect(dto.bigScreenUrl).toBe("https://app.example.com/e/abc/big");
     expect(dto.code).toBe("XY12Z3");
   });
+
+  it("defaults palette to aurora for legacy events without one", () => {
+    expect(eventToDTO(baseEvent).palette).toBe("aurora");
+  });
+
+  it("passes a stored palette through", () => {
+    expect(eventToDTO({ ...baseEvent, palette: "rally" }).palette).toBe("rally");
+  });
 });
 
 describe("videoToDTO", () => {

@@ -2,12 +2,17 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { DEMO } from "../config";
-import { BRAND_GRAD, ACCENT, FONT_DISPLAY, INK, MUTED, MUTED2 } from "../design";
+import { BRAND_GRAD, ACCENT, FONT_DISPLAY, INK, MUTED, MUTED2, PAGE_BG, THEMES } from "../design";
+import { PaletteProvider } from "../PaletteProvider";
+import { DEFAULT_PALETTE_ID } from "../palettes";
+import { PalettePicker } from "./organizer/PalettePicker";
+import { TopicEditor } from "./organizer/TopicEditor";
 import { Spinner } from "./common";
+import type { Theme } from "../types";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
-  background: "radial-gradient(1300px 740px at 50% -8%, #223159, #0C1024 60%)",
+  background: PAGE_BG,
   color: INK,
   display: "flex",
   flexDirection: "column",
@@ -72,11 +77,35 @@ const outlineBtn: React.CSSProperties = {
   gap: 9,
 };
 
+const sectionLabel: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: ".07em",
+  color: MUTED2,
+  margin: "20px 0 10px",
+};
+
+const linkBtn: React.CSSProperties = {
+  marginTop: 14,
+  padding: 0,
+  border: "none",
+  background: "transparent",
+  color: MUTED,
+  fontWeight: 700,
+  fontSize: 13,
+  cursor: "pointer",
+  fontFamily: "inherit",
+  textAlign: "left",
+};
+
 export type LandingMode = "full" | "join" | "create";
 
 export function Landing({ mode = "full" }: { mode?: LandingMode }) {
   const nav = useNavigate();
   const [name, setName] = useState("");
+  const [palette, setPalette] = useState(DEFAULT_PALETTE_ID);
+  const [topics, setTopics] = useState<Theme[]>(THEMES);
+  const [showCustomize, setShowCustomize] = useState(false);
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinRaw, setJoinRaw] = useState("");
@@ -109,7 +138,7 @@ export function Landing({ mode = "full" }: { mode?: LandingMode }) {
     setCreating(true);
     setErr(null);
     try {
-      const ev = await api.createEvent(name.trim() || "Tomorrow Stories");
+      const ev = await api.createEvent(name.trim() || "Tomorrow Stories", { palette, themes: topics });
       nav(`/e/${ev.eventId}/big`);
     } catch (e) {
       setErr({ scope: "create", msg: e instanceof Error ? e.message : "Could not create event" });
@@ -162,7 +191,20 @@ export function Landing({ mode = "full" }: { mode?: LandingMode }) {
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && create()}
       />
-      <button style={{ ...(createPrimary ? primaryBtn : outlineBtn), marginTop: 12 }} onClick={create} disabled={creating}>
+
+      <div style={sectionLabel}>WALL & APP THEME</div>
+      <PalettePicker value={palette} onChange={setPalette} />
+
+      <button type="button" onClick={() => setShowCustomize((v) => !v)} style={linkBtn}>
+        {showCustomize ? "− Hide topic customization" : "+ Customize the topics attendees pick"}
+      </button>
+      {showCustomize && (
+        <div style={{ marginTop: 4 }}>
+          <TopicEditor themes={topics} onChange={setTopics} />
+        </div>
+      )}
+
+      <button style={{ ...(createPrimary ? primaryBtn : outlineBtn), marginTop: 16 }} onClick={create} disabled={creating}>
         {creating ? <Spinner size={18} /> : null}
         {creating ? "Creating…" : "Create event & open big screen"}
       </button>
@@ -170,6 +212,9 @@ export function Landing({ mode = "full" }: { mode?: LandingMode }) {
   );
 
   return (
+    // While the organizer is on a create surface, preview the selected palette
+    // live across the page; on join-only it renders the default look.
+    <PaletteProvider paletteId={showCreate ? palette : undefined}>
     <div style={page}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ width: 40, height: 40, borderRadius: 13, background: BRAND_GRAD, boxShadow: `0 6px 20px -6px ${ACCENT}` }} />
@@ -187,6 +232,7 @@ export function Landing({ mode = "full" }: { mode?: LandingMode }) {
         <Link to="/admin" style={{ color: MUTED2, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>Organizer console →</Link>
       )}
     </div>
+    </PaletteProvider>
   );
 }
 

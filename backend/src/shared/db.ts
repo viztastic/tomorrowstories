@@ -163,6 +163,45 @@ export async function deleteEvent(eventId: string, code: string, videoIds: strin
   }
 }
 
+/**
+ * Patch mutable fields on an event's META item (name / palette / topic buckets).
+ * Only provided fields are written. Fails if the event doesn't exist. Returns
+ * the full updated item so the caller can DTO it.
+ */
+export async function updateEvent(
+  eventId: string,
+  patch: { name?: string; palette?: string; themes?: EventItem["themes"] }
+): Promise<EventItem> {
+  const sets: string[] = [];
+  const names: Record<string, string> = {};
+  const values: Record<string, unknown> = {};
+  if (patch.name !== undefined) {
+    sets.push("#n = :n");
+    names["#n"] = "name";
+    values[":n"] = patch.name;
+  }
+  if (patch.palette !== undefined) {
+    sets.push("palette = :p");
+    values[":p"] = patch.palette;
+  }
+  if (patch.themes !== undefined) {
+    sets.push("themes = :t");
+    values[":t"] = patch.themes;
+  }
+  const res = await doc.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: eventPK(eventId), SK: "META" },
+      UpdateExpression: "SET " + sets.join(", "),
+      ExpressionAttributeNames: Object.keys(names).length ? names : undefined,
+      ExpressionAttributeValues: values,
+      ConditionExpression: "attribute_exists(PK)",
+      ReturnValues: "ALL_NEW",
+    })
+  );
+  return res.Attributes as EventItem;
+}
+
 /** Atomic like increment; returns the new total. */
 export async function incrementLikes(eventId: string, videoId: string): Promise<number> {
   const res = await doc.send(

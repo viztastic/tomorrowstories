@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { LocalComment, Theme, VideoDTO } from "../../types";
-import { BRAND_GRAD, fmtDur, fmtLikes, initials, MUTED, pairFor, stillBg } from "../../design";
+import { BRAND_GRAD, DANGER_INK, fmtDur, fmtLikes, initials, INK, MUTED, ON_ACCENT, OVERLAY_BG, pairFor, stillBg } from "../../design";
 import { Grain, PlayBadge } from "../common";
 
 const avatarBig = (pair: [string, string]): CSSProperties => ({
@@ -44,14 +44,14 @@ export function VideoView({
 }) {
   const pair = pairFor(theme, video.id);
   return (
-    <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", background: "#0B0812" }}>
+    <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", background: OVERLAY_BG }}>
       <div style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px" }}>
         <button onClick={onBack} style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(255,255,255,.07)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M15 5L8 12L15 19" stroke="#F4F1EC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <div style={{ padding: "6px 13px", borderRadius: 999, fontSize: 12.5, fontWeight: 800, background: theme.color, color: "#0C0A12", whiteSpace: "nowrap" }}>{theme.name}</div>
+        <div style={{ padding: "6px 13px", borderRadius: 999, fontSize: 12.5, fontWeight: 800, background: theme.color, color: ON_ACCENT, whiteSpace: "nowrap" }}>{theme.name}</div>
         <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(255,255,255,.07)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <circle cx="5" cy="12" r="1.7" fill="#F4F1EC" />
@@ -97,7 +97,7 @@ export function VideoView({
           </div>
           <button
             onClick={onToggleFollow}
-            style={{ padding: "9px 16px", borderRadius: 999, fontSize: 12.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", border: "1px solid " + (following ? theme.color : "rgba(255,255,255,.16)"), background: following ? theme.color : "transparent", color: following ? "#0C0A12" : "#F4F1EC" }}
+            style={{ padding: "9px 16px", borderRadius: 999, fontSize: 12.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", border: "1px solid " + (following ? theme.color : "rgba(255,255,255,.16)"), background: following ? theme.color : "transparent", color: following ? ON_ACCENT : INK }}
           >
             {following ? "Following" : "Follow theme"}
           </button>
@@ -108,7 +108,7 @@ export function VideoView({
         <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
           <button
             onClick={onLike}
-            style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: 11, borderRadius: 14, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 14, background: liked ? "rgba(255,61,87,.16)" : "rgba(255,255,255,.06)", color: liked ? "#FF6B7E" : "#F4F1EC" }}
+            style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: 11, borderRadius: 14, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 14, background: liked ? "rgba(255,61,87,.16)" : "rgba(255,255,255,.06)", color: liked ? DANGER_INK : INK }}
           >
             <span style={{ fontSize: 17 }}>&#9829;</span>
             {fmtLikes(video.likes)}
@@ -141,7 +141,7 @@ export function VideoView({
         </div>
       </div>
 
-      <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 9, padding: "10px 14px calc(10px + env(safe-area-inset-bottom))", borderTop: "1px solid rgba(255,255,255,.07)", background: "#0B0812" }}>
+      <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 9, padding: "10px 14px calc(10px + env(safe-area-inset-bottom))", borderTop: "1px solid rgba(255,255,255,.07)", background: OVERLAY_BG }}>
         <input
           value={commentDraft}
           onChange={(e) => onCommentChange(e.target.value)}

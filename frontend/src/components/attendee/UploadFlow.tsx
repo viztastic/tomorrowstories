@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Theme, VideoDTO, VideoStatus } from "../../types";
 import { api } from "../../api";
-import { BRAND_GRAD, fmtDur, MUTED, pairFor, stillBg, themeById } from "../../design";
+import { BRAND_GRAD, DANGER, fmtDur, INK, MUTED, ON_ACCENT, OVERLAY_BG, pairFor, stillBg, themeById } from "../../design";
 import { Spinner } from "../common";
 
 // Record → Details → Review, then the done screen (step 4). There's no trim
@@ -32,13 +32,21 @@ export function UploadFlow({
   const [progress, setProgress] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const [postedStatus, setPostedStatus] = useState<VideoStatus | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  // Two hidden inputs: `capture` biases mobile toward the camera; no `capture`
+  // opens the photo library. Desktop ignores `capture` and shows a file dialog
+  // for both — which is fine.
+  const recordRef = useRef<HTMLInputElement>(null);
+  const libraryRef = useRef<HTMLInputElement>(null);
 
-  const dTheme = themeById(themes, themeId || "create");
+  const fallbackThemeId = themeId || themes[0]?.id || "";
+  const dTheme = themeById(themes, fallbackThemeId);
   const titleShown = title.trim() || "My 60-second story";
 
-  function pickFile() {
-    inputRef.current?.click();
+  function pickRecord() {
+    recordRef.current?.click();
+  }
+  function pickLibrary() {
+    libraryRef.current?.click();
   }
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -87,7 +95,7 @@ export function UploadFlow({
     try {
       const v = await api.upload(
         eventId,
-        { title: titleShown, theme: themeId || "create", author: authorName.trim() || "You", durationSec, contentType: file?.type || "video/mp4" },
+        { title: titleShown, theme: themeId || fallbackThemeId, author: authorName.trim() || "You", durationSec, contentType: file?.type || "video/mp4" },
         file,
         setProgress
       );
@@ -104,7 +112,7 @@ export function UploadFlow({
   // ---- Done screen ----
   if (step === 4) {
     return (
-      <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", background: "#0B0812" }}>
+      <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", background: OVERLAY_BG }}>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" }}>
           <div style={{ width: 88, height: 88, borderRadius: "50%", background: BRAND_GRAD, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 16px 44px -12px #FF6B35", animation: "rise .4s ease" }}>
             <svg width="42" height="42" viewBox="0 0 24 24" fill="none">
@@ -139,8 +147,10 @@ export function UploadFlow({
   };
 
   return (
-    <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", background: "#0B0812" }}>
-      <input ref={inputRef} type="file" accept="video/*" capture="user" onChange={onFile} style={{ display: "none" }} />
+    <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", background: OVERLAY_BG }}>
+      {/* Record → biases the camera; Library → opens the photo roll (no capture attr). */}
+      <input ref={recordRef} type="file" accept="video/*" capture="user" onChange={onFile} style={{ display: "none" }} />
+      <input ref={libraryRef} type="file" accept="video/*" onChange={onFile} style={{ display: "none" }} />
 
       <div style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px 4px" }}>
         <button onClick={back} style={iconBtn}>
@@ -160,21 +170,34 @@ export function UploadFlow({
         {step === 1 && (
           <>
             <div style={h1}>Share your story</div>
-            <div style={sub}>One take, up to 60 seconds. Shot on your phone.</div>
-            <div style={{ position: "relative", marginTop: 20, borderRadius: 22, overflow: "hidden", aspectRatio: "10 / 13", background: "radial-gradient(120% 90% at 50% 20%, #2a2140, #0f0b1a)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,255,255,.08)" }}>
-              <div style={{ position: "absolute", top: 14, left: 14, display: "flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,.4)", padding: "4px 10px", borderRadius: 999, fontSize: 11, fontWeight: 800, letterSpacing: ".05em" }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#FF3D57", animation: "blink 1s infinite" }} />REC
-              </div>
-              <div style={{ position: "absolute", top: 14, right: 14, fontSize: 11, fontWeight: 700, color: "#D9D6E0", background: "rgba(0,0,0,.4)", padding: "4px 10px", borderRadius: 999 }}>0:00 / 1:00</div>
-              <svg width="46" height="46" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.5 }}><rect x="3" y="6" width="13" height="12" rx="2.5" stroke="#fff" strokeWidth="1.6" /><path d="M16 10l5-3v10l-5-3" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round" /></svg>
-              <button onClick={pickFile} style={{ position: "absolute", bottom: 24, width: 70, height: 70, borderRadius: "50%", background: "rgba(255,255,255,.14)", border: "3px solid #fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                <span style={{ width: 50, height: 50, borderRadius: "50%", background: "#FF3D57" }} />
+            <div style={sub}>Up to 60 seconds. Record a new video, or upload one you already have.</div>
+
+            {/* A clear two-way choice: film now, or pick an existing clip. */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 22 }}>
+              <button onClick={pickRecord} style={choicePrimary}>
+                <span style={choiceIcon}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="13" height="12" rx="2.5" stroke="#fff" strokeWidth="1.8" /><path d="M16 10l5-3v10l-5-3" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" /></svg>
+                </span>
+                <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+                  <span style={{ fontWeight: 800, fontSize: 16 }}>Record a video</span>
+                  <span style={{ fontSize: 12.5, opacity: 0.85 }}>Open your camera and film now</span>
+                </span>
+              </button>
+              <button onClick={pickLibrary} style={choiceOutline}>
+                <span style={{ ...choiceIcon, background: "rgba(255,255,255,.08)" }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="#C9C6D4" strokeWidth="1.8" /><path d="M3 16l5-4 4 3 4-4 5 4" stroke="#C9C6D4" strokeWidth="1.8" strokeLinejoin="round" /></svg>
+                </span>
+                <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+                  <span style={{ fontWeight: 800, fontSize: 16 }}>Choose from camera roll</span>
+                  <span style={{ fontSize: 12.5, color: "#9E99AD" }}>Upload a video you already recorded</span>
+                </span>
               </button>
             </div>
-            <button onClick={pickFile} style={{ marginTop: 14, width: "100%", padding: 14, borderRadius: 15, border: "1px solid rgba(255,255,255,.14)", background: "rgba(255,255,255,.05)", color: "#F4F1EC", fontWeight: 700, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}>
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="#C9C6D4" strokeWidth="1.6" /><path d="M3 16l5-4 4 3 4-4 5 4" stroke="#C9C6D4" strokeWidth="1.6" strokeLinejoin="round" /></svg>
-              Upload from camera roll
-            </button>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 12, color: MUTED, marginTop: 18 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: DANGER }} />
+              We’ll use up to the first 60 seconds.
+            </div>
           </>
         )}
 
@@ -191,7 +214,7 @@ export function UploadFlow({
               {themes.map((t) => {
                 const on = themeId === t.id;
                 return (
-                  <button key={t.id} onClick={() => setThemeId(t.id)} style={{ padding: "10px 15px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: "1px solid " + (on ? t.color : "rgba(255,255,255,.14)"), background: on ? t.color : "rgba(255,255,255,.04)", color: on ? "#0C0A12" : "#C9C6D4" }}>
+                  <button key={t.id} onClick={() => setThemeId(t.id)} style={{ padding: "10px 15px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: "1px solid " + (on ? t.color : "rgba(255,255,255,.14)"), background: on ? t.color : "rgba(255,255,255,.04)", color: on ? ON_ACCENT : "#C9C6D4" }}>
                     {t.name}
                   </button>
                 );
@@ -209,7 +232,7 @@ export function UploadFlow({
                 {fileUrl ? <video src={fileUrl} muted playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={fillBg} />}
               </div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ display: "inline-block", padding: "5px 12px", borderRadius: 999, fontSize: 11.5, fontWeight: 800, background: dTheme.color, color: "#0C0A12", whiteSpace: "nowrap" }}>{dTheme.name}</div>
+                <div style={{ display: "inline-block", padding: "5px 12px", borderRadius: 999, fontSize: 11.5, fontWeight: 800, background: dTheme.color, color: ON_ACCENT, whiteSpace: "nowrap" }}>{dTheme.name}</div>
                 <div style={{ fontWeight: 700, fontSize: 15, marginTop: 8, lineHeight: 1.25 }}>{titleShown}</div>
                 <div style={{ fontSize: 12.5, color: "#8B8698", marginTop: 4 }}>{authorName.trim() || "You"} · {fmtDur(durationSec)}</div>
               </div>
@@ -249,6 +272,9 @@ export function UploadFlow({
 }
 
 const iconBtn: CSSProperties = { width: 38, height: 38, borderRadius: "50%", background: "rgba(255,255,255,.07)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" };
+const choicePrimary: CSSProperties = { display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "16px 18px", borderRadius: 16, border: "none", cursor: "pointer", fontFamily: "inherit", color: "#fff", background: BRAND_GRAD, textAlign: "left" };
+const choiceOutline: CSSProperties = { display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "16px 18px", borderRadius: 16, border: "1px solid rgba(255,255,255,.16)", cursor: "pointer", fontFamily: "inherit", color: INK, background: "rgba(255,255,255,.05)", textAlign: "left" };
+const choiceIcon: CSSProperties = { width: 42, height: 42, flex: "none", borderRadius: 12, background: "rgba(255,255,255,.18)", display: "flex", alignItems: "center", justifyContent: "center" };
 const h1: CSSProperties = { fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 800, fontSize: 24, letterSpacing: "-.02em" };
 const sub: CSSProperties = { fontSize: 13.5, color: "#9E99AD", marginTop: 6 };
 const detailInput: CSSProperties = { width: "100%", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 14, padding: "14px 16px", color: "#F4F1EC", fontSize: 15, fontFamily: "inherit", outline: "none" };

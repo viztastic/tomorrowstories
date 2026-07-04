@@ -12,7 +12,8 @@ export interface EventDTO {
   eventId: string;
   code: string;
   name: string;
-  themes: Theme[];
+  themes: Theme[]; // topic buckets attendees choose from
+  palette: string; // visual palette id (color skin) — see palettes.ts
   attendeeUrl: string;
   bigScreenUrl: string;
   createdAt: string;

@@ -1,6 +1,13 @@
 import { DEMO, getApiUrl } from "./config";
 import { demo } from "./demo";
-import type { EventDTO, VideoDTO } from "./types";
+import type { EventDTO, Theme, VideoDTO } from "./types";
+
+/** Organizer-editable event settings (create options + PATCH body). */
+export interface EventSettings {
+  name?: string;
+  palette?: string;
+  themes?: Theme[];
+}
 
 export interface PresignedPost {
   url: string;
@@ -30,9 +37,24 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  async createEvent(name: string): Promise<EventDTO> {
-    if (DEMO || !(await getApiUrl())) return demo.createEvent(name);
-    return req<EventDTO>("/events", { method: "POST", body: JSON.stringify({ name }) });
+  async createEvent(name: string, opts: { palette?: string; themes?: Theme[] } = {}): Promise<EventDTO> {
+    if (DEMO || !(await getApiUrl())) return demo.createEvent(name, opts);
+    // undefined palette/themes are dropped by JSON.stringify, so the backend
+    // falls back to its defaults — an organizer who doesn't customize is unchanged.
+    return req<EventDTO>("/events", {
+      method: "POST",
+      body: JSON.stringify({ name, palette: opts.palette, themes: opts.themes }),
+    });
+  },
+
+  /** Organizer: edit an event's name / palette / topic buckets. Guarded by the shared key. */
+  async updateEvent(eventId: string, patch: EventSettings, key: string): Promise<EventDTO> {
+    if (DEMO || !(await getApiUrl())) return demo.updateEvent(eventId, patch);
+    return req<EventDTO>(`/events/${eventId}`, {
+      method: "PATCH",
+      headers: { "x-admin-key": key },
+      body: JSON.stringify(patch),
+    });
   },
 
   async getEvent(eventId: string): Promise<EventDTO> {

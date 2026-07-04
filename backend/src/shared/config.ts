@@ -24,7 +24,7 @@ export const config = {
   transcode: (process.env.TRANSCODE || "on").toLowerCase() !== "off",
 };
 
-/** The default six conference themes from the design. */
+/** The default six conference topic buckets ("themes") from the design. */
 export const DEFAULT_THEMES = [
   { id: "human", name: "Human & Machine", color: "#8B5CF6" },
   { id: "work", name: "Future of Work", color: "#FFB020" },
@@ -33,3 +33,10 @@ export const DEFAULT_THEMES = [
   { id: "create", name: "Creative Frontiers", color: "#22D3EE" },
   { id: "city", name: "Cities & Community", color: "#4D7CFF" },
 ];
+
+// Allowed values for an event's visual palette (the color "skin" of the wall +
+// attendee UI). The backend only stores/validates the id — the actual colors
+// live in the frontend registry (frontend/src/palettes.ts). Keep these ids in
+// sync with that file's PALETTES keys.
+export const PALETTE_IDS = ["aurora", "rally", "marine"];
+export const DEFAULT_PALETTE_ID = "aurora";

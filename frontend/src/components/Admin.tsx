@@ -5,8 +5,10 @@ import { api } from "../api";
 import { DEMO } from "../config";
 import { ACCENT, BRAND_GRAD, FONT_DISPLAY, INK, MUTED, MUTED2 } from "../design";
 import { Spinner } from "./common";
+import { PalettePicker } from "./organizer/PalettePicker";
+import { TopicEditor } from "./organizer/TopicEditor";
 import { buildArchive, slug } from "../export";
-import type { EventDTO } from "../types";
+import type { EventDTO, Theme } from "../types";
 
 const KEY = "ts:adminKey";
 
@@ -99,6 +101,7 @@ export function Admin() {
               ev={e}
               adminKey={savedKey}
               onDeleted={() => setEvents((prev) => prev.filter((x) => x.eventId !== e.eventId))}
+              onUpdated={(updated) => setEvents((prev) => prev.map((x) => (x.eventId === updated.eventId ? updated : x)))}
             />
           ))}
         </div>
@@ -107,11 +110,35 @@ export function Admin() {
   );
 }
 
-function SessionCard({ ev, adminKey, onDeleted }: { ev: EventDTO; adminKey: string; onDeleted: () => void }) {
+function SessionCard({ ev, adminKey, onDeleted, onUpdated }: { ev: EventDTO; adminKey: string; onDeleted: () => void; onUpdated: (ev: EventDTO) => void }) {
   const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState<"" | "delete" | "download">("");
+  const [busy, setBusy] = useState<"" | "delete" | "download" | "save">("");
   const [dl, setDl] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draftPalette, setDraftPalette] = useState(ev.palette);
+  const [draftThemes, setDraftThemes] = useState<Theme[]>(ev.themes);
+
+  function openEdit() {
+    setDraftPalette(ev.palette);
+    setDraftThemes(ev.themes);
+    setErr(null);
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    setBusy("save");
+    setErr(null);
+    try {
+      const updated = await api.updateEvent(ev.eventId, { palette: draftPalette, themes: draftThemes }, adminKey);
+      onUpdated(updated);
+      setEditing(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy("");
+    }
+  }
 
   async function doDelete() {
     setBusy("delete");
@@ -172,9 +199,26 @@ function SessionCard({ ev, adminKey, onDeleted }: { ev: EventDTO; adminKey: stri
         <LinkRow label="Big screen" url={ev.bigScreenUrl} />
       </div>
       {err && <div style={{ ...errBox, marginTop: 12 }}>{err}</div>}
+      {editing && (
+        <div style={{ marginTop: 14, padding: 14, borderRadius: 14, background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.08)" }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".07em", color: MUTED2, marginBottom: 10 }}>WALL & APP THEME</div>
+          <PalettePicker value={draftPalette} onChange={setDraftPalette} />
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".07em", color: MUTED2, margin: "18px 0 10px" }}>TOPICS ATTENDEES CAN PICK</div>
+          <TopicEditor themes={draftThemes} onChange={setDraftThemes} />
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <button onClick={saveEdit} disabled={busy === "save"} style={{ ...primaryBtn, width: "auto", padding: "10px 18px" }}>
+              {busy === "save" ? "Saving…" : "Save changes"}
+            </button>
+            <button onClick={() => setEditing(false)} disabled={busy === "save"} style={chip}>Cancel</button>
+          </div>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
         <button onClick={download} disabled={!!busy} style={chip}>
           {busy === "download" ? dl ?? "Working…" : "⬇ Download archive"}
+        </button>
+        <button onClick={editing ? () => setEditing(false) : openEdit} disabled={busy === "delete" || busy === "download"} style={chip}>
+          {editing ? "Close editor" : "✎ Edit theme & topics"}
         </button>
         {dl && busy !== "download" && <span style={{ fontSize: 12.5, color: MUTED, fontWeight: 700 }}>{dl}</span>}
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>

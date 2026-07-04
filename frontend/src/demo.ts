@@ -1,8 +1,9 @@
 // In-memory "backend" for demo mode (VITE_DEMO=1 or no /config.json). Lets the
 // whole app run with no AWS — mirrors the seeded feel of the original prototype.
 
-import type { EventDTO, VideoDTO } from "./types";
+import type { EventDTO, Theme, VideoDTO } from "./types";
 import { THEMES } from "./design";
+import { DEFAULT_PALETTE_ID } from "./palettes";
 
 interface DemoEvent {
   event: EventDTO;
@@ -40,12 +41,13 @@ function rid(n: number): string {
   return s;
 }
 
-function makeEvent(eventId: string, name: string): DemoEvent {
+function makeEvent(eventId: string, name: string, opts: { palette?: string; themes?: Theme[] } = {}): DemoEvent {
   const event: EventDTO = {
     eventId,
     code: rid(6).toUpperCase(),
     name,
-    themes: THEMES,
+    themes: opts.themes?.length ? opts.themes : THEMES,
+    palette: opts.palette ?? DEFAULT_PALETTE_ID,
     attendeeUrl: `${location.origin}/e/${eventId}`,
     bigScreenUrl: `${location.origin}/e/${eventId}/big`,
     createdAt: new Date().toISOString(),
@@ -63,10 +65,17 @@ function ensure(eventId: string): DemoEvent {
 }
 
 export const demo = {
-  createEvent(name: string): EventDTO {
+  createEvent(name: string, opts: { palette?: string; themes?: Theme[] } = {}): EventDTO {
     const eventId = rid(16);
-    const e = makeEvent(eventId, name || "Tomorrow Stories");
+    const e = makeEvent(eventId, name || "Tomorrow Stories", opts);
     store.set(eventId, e);
+    return e.event;
+  },
+  updateEvent(eventId: string, patch: { name?: string; palette?: string; themes?: Theme[] }): EventDTO {
+    const e = ensure(eventId);
+    if (patch.name !== undefined) e.event.name = patch.name;
+    if (patch.palette !== undefined) e.event.palette = patch.palette;
+    if (patch.themes !== undefined) e.event.themes = patch.themes;
     return e.event;
   },
   getEvent(eventId: string): EventDTO {

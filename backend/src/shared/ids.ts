@@ -27,3 +27,17 @@ export function newEventCode(): string {
 export function newVideoId(): string {
   return base32(randomBytes(10)).toLowerCase();
 }
+
+/**
+ * URL/id-friendly slug for a topic-bucket name (mirrors the frontend `slug` in
+ * export.ts). Lowercase, non-alphanumerics collapsed to dashes, trimmed, capped.
+ * Returns "" when the name has no usable characters — callers fall back to a
+ * random id so a topic never ends up with an empty id.
+ */
+export function slugify(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 24);
+}

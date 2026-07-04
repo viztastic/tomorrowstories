@@ -5,14 +5,29 @@
 import { useEffect } from "react";
 import type { CSSProperties } from "react";
 import type { Theme } from "./types";
+import { defaultRootCss } from "./palettes";
 
-export const ACCENT = "#FF6B35";
-export const BRAND_GRAD = `linear-gradient(120deg, ${ACCENT}, #FF3D77 46%, #7B2FF7)`;
+// Color tokens resolve to CSS custom properties set per-event by PaletteProvider
+// (see palettes.ts). GlobalStyle seeds the default palette on :root, so pages
+// that never mount a provider render the original look. Changing an event's
+// palette recolors every inline style that uses these constants for free.
+export const ACCENT = "var(--ts-accent)";
+export const BRAND_GRAD = "var(--ts-brand-grad)";
 
-export const INK = "#F4F1EC";
-export const MUTED = "#8B8698";
-export const MUTED2 = "#726D82";
-export const PANEL = "rgba(255,255,255,.05)";
+export const INK = "var(--ts-ink)";
+export const MUTED = "var(--ts-muted)";
+export const MUTED2 = "var(--ts-muted2)";
+export const PANEL = "var(--ts-panel)";
+
+// Additional palette-driven tokens (previously hardcoded hex at call sites).
+export const HAIRLINE = "var(--ts-hairline)";
+export const PAGE_BG = "var(--ts-page-bg)";
+export const BODY_BG = "var(--ts-body-bg)";
+export const STAGE_BG = "var(--ts-stage-bg)";
+export const OVERLAY_BG = "var(--ts-overlay-bg)";
+export const DANGER = "var(--ts-danger)";
+export const DANGER_INK = "var(--ts-danger-ink)";
+export const ON_ACCENT = "var(--ts-on-accent)";
 
 export const FONT_DISPLAY = "'Bricolage Grotesque', sans-serif";
 export const FONT_UI = "'Hanken Grotesk', system-ui, sans-serif";
@@ -27,7 +42,9 @@ export const THEMES: Theme[] = [
 ];
 
 export function themeById(themes: Theme[], id: string): Theme {
-  return themes.find((t) => t.id === id) || { id, name: "", color: "#888" };
+  // Friendly fallback so a clip whose topic was removed/renamed never renders a
+  // blank pill — it groups under "Uncategorized" instead of vanishing.
+  return themes.find((t) => t.id === id) || { id, name: "Uncategorized", color: "#888" };
 }
 
 // Film-grain overlay (inline SVG data-URI, as in the prototype).
@@ -96,13 +113,16 @@ export function GlobalStyle() {
     const el = document.createElement("style");
     el.id = id;
     el.textContent = `
+      /* Default palette tokens (Aurora). PaletteProvider overrides these on
+         :root per-event; removing its overrides falls back to these. */
+      :root{${defaultRootCss()}}
       *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
       html,body,#root{margin:0;min-height:100%;}
       /* clip (not hidden) prevents horizontal overflow WITHOUT making body a
          scroll container, so vertical trackpad scrolling keeps working. The
          hidden fallback runs first for browsers without overflow:clip support. */
       html,body{overflow-x:hidden;overflow-x:clip;overscroll-behavior:none;}
-      body{background:#0C1024;color:${INK};font-family:${FONT_UI};max-width:100vw;}
+      body{background:var(--ts-body-bg);color:var(--ts-ink);font-family:${FONT_UI};max-width:100vw;}
       button{font-family:inherit;}
       ::-webkit-scrollbar{width:0px;height:0px;}
       @keyframes wallUp{from{transform:translateY(0)}to{transform:translateY(-50%)}}

@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Theme, VideoDTO } from "../../types";
-import { FONT_DISPLAY, MUTED, MUTED2, themeById } from "../../design";
+import { FONT_DISPLAY, MUTED, MUTED2, ON_ACCENT, themeById } from "../../design";
 import { VideoCard } from "./VideoCard";
 
 function chipStyle(on: boolean, fill: string): CSSProperties {
@@ -14,7 +14,7 @@ function chipStyle(on: boolean, fill: string): CSSProperties {
     fontFamily: "inherit",
     border: "1px solid " + (on ? fill : "rgba(255,255,255,.13)"),
     background: on ? fill : "rgba(255,255,255,.04)",
-    color: on ? "#0C0A12" : "#C9C6D4",
+    color: on ? ON_ACCENT : "#C9C6D4",
   };
 }
 
@@ -28,7 +28,7 @@ function followStyle(on: boolean, color: string): CSSProperties {
     fontFamily: "inherit",
     border: "1px solid " + (on ? color : "rgba(255,255,255,.14)"),
     background: on ? color : "transparent",
-    color: on ? "#0C0A12" : "#C9C6D4",
+    color: on ? ON_ACCENT : "#C9C6D4",
   };
 }
 

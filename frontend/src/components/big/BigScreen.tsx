@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { Theme, VideoDTO } from "../../types";
-import { ACCENT, BRAND_GRAD, FONT_DISPLAY, INK, MUTED, MUTED2, pairFor, stillBg, themeById } from "../../design";
+import { ACCENT, BRAND_GRAD, DANGER, DANGER_INK, FONT_DISPLAY, INK, MUTED, MUTED2, ON_ACCENT, PAGE_BG, STAGE_BG, pairFor, stillBg, themeById } from "../../design";
+import { PaletteProvider } from "../../PaletteProvider";
 import { Grain, Qr, Spinner } from "../common";
 import { Thumb, VideoCard } from "../attendee/VideoCard";
 import { useEventData } from "../../useEventData";
@@ -73,10 +74,14 @@ export function BigScreen({ eventId }: { eventId: string }) {
     );
   }
 
-  return isWide ? (
-    <Projector event={data.event} live={live} trending={trending} />
-  ) : (
-    <OrganizerPanel eventId={eventId} event={data.event} live={live} trending={trending} />
+  return (
+    <PaletteProvider paletteId={data.event.palette}>
+      {isWide ? (
+        <Projector event={data.event} live={live} trending={trending} />
+      ) : (
+        <OrganizerPanel eventId={eventId} event={data.event} live={live} trending={trending} />
+      )}
+    </PaletteProvider>
   );
 }
 
@@ -109,8 +114,8 @@ function OrganizerPanel({
   return (
     <div style={mobileCanvas}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#FF3D57", animation: "blink 1.2s infinite" }} />
-        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".14em", color: "#FF6B7E" }}>LIVE NOW</span>
+        <span style={{ width: 9, height: 9, borderRadius: "50%", background: DANGER, animation: "blink 1.2s infinite" }} />
+        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".14em", color: DANGER_INK }}>LIVE NOW</span>
       </div>
       <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 30, letterSpacing: "-.02em", lineHeight: 1.05, marginTop: 8 }}>{event.name}</div>
       <div style={{ fontSize: 13.5, color: MUTED, fontWeight: 600, marginTop: 6 }}>{live.length} stories from the room · updating live</div>
@@ -120,7 +125,7 @@ function OrganizerPanel({
         <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 19, letterSpacing: "-.01em" }}>Get stories on the wall</div>
         <div style={{ fontSize: 13, color: MUTED, marginTop: 6, lineHeight: 1.45 }}>Show this QR, or share the link. Anyone who scans can post a 60-second story.</div>
         <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
-          <div style={{ background: "#F4F1EC", borderRadius: 18, padding: 16 }}>
+          <div style={{ background: INK, borderRadius: 18, padding: 16 }}>
             <Qr value={event.attendeeUrl} size={200} />
           </div>
         </div>
@@ -273,8 +278,8 @@ function Projector({
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#FF3D57", animation: "blink 1.2s infinite" }} />
-                  <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: ".14em", color: "#FF6B7E", whiteSpace: "nowrap" }}>LIVE NOW</span>
+                  <span style={{ width: 9, height: 9, borderRadius: "50%", background: DANGER, animation: "blink 1.2s infinite" }} />
+                  <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: ".14em", color: DANGER_INK, whiteSpace: "nowrap" }}>LIVE NOW</span>
                 </div>
                 <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 42, letterSpacing: "-.03em", lineHeight: 1, marginTop: 8, whiteSpace: "nowrap" }}>{event.name}</div>
                 <div style={{ fontSize: 15, color: "#9E99AD", fontWeight: 600, marginTop: 8 }}>{live.length} stories from the room · updating live</div>
@@ -321,7 +326,7 @@ function Projector({
           <div style={{ fontSize: 14, color: "#9E99AD", fontWeight: 500, marginTop: 10, lineHeight: 1.45 }}>
             Scan to record from your phone. It appears here in seconds.
           </div>
-          <div style={{ marginTop: 22, background: "#F4F1EC", borderRadius: 18, padding: 16, alignSelf: "flex-start" }}>
+          <div style={{ marginTop: 22, background: INK, borderRadius: 18, padding: 16, alignSelf: "flex-start" }}>
             <Qr value={event.attendeeUrl} size={150} />
           </div>
           <div style={{ marginTop: 18 }}>
@@ -372,7 +377,7 @@ function FacilitatorTable({ live, themes, onOpen }: { live: VideoDTO[]; themes: 
                 <div style={{ fontWeight: 700, fontSize: 15.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.title}</div>
                 <div style={{ fontSize: 13, color: MUTED, marginTop: 3 }}>{v.author}</div>
               </div>
-              <span style={{ flex: "none", padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800, background: t.color, color: "#0C0A12", whiteSpace: "nowrap" }}>{t.name}</span>
+              <span style={{ flex: "none", padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800, background: t.color, color: ON_ACCENT, whiteSpace: "nowrap" }}>{t.name}</span>
               <span style={{ flex: "none", width: 48, textAlign: "right", fontSize: 12.5, color: MUTED2, fontWeight: 700 }}>{fmtDurShort(v.durationSec)}</span>
               <span style={{ flex: "none", width: 30, height: 30, borderRadius: "50%", background: "rgba(255,255,255,.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 5.5L18.5 12L8 18.5V5.5Z" fill="#F4F1EC" /></svg>
@@ -477,7 +482,7 @@ function FocusModal({ video, theme, onClose }: { video: VideoDTO; theme: Theme; 
           )}
         </div>
         <div style={{ textAlign: "center", maxWidth: 520 }}>
-          <span style={{ display: "inline-block", padding: "5px 13px", borderRadius: 999, fontSize: 13, fontWeight: 800, background: theme.color, color: "#0C0A12" }}>{theme.name}</span>
+          <span style={{ display: "inline-block", padding: "5px 13px", borderRadius: 999, fontSize: 13, fontWeight: 800, background: theme.color, color: ON_ACCENT }}>{theme.name}</span>
           <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 26, letterSpacing: "-.02em", marginTop: 12 }}>{video.title}</div>
           <div style={{ fontSize: 15, color: MUTED, fontWeight: 600, marginTop: 6 }}>{video.author}</div>
         </div>
@@ -549,7 +554,7 @@ function BigCard({ video, theme, autoPlay, onOpen }: { video: VideoDTO; theme: T
 const tableRow: CSSProperties = { display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "10px 14px", borderRadius: 14, border: "1px solid rgba(255,255,255,.07)", background: "rgba(255,255,255,.03)", cursor: "pointer", fontFamily: "inherit", color: INK };
 // Fades the marquee's cropped edges so cards dissolve at the top/bottom of the wall.
 const wallMask = "linear-gradient(180deg,transparent,#000 6%,#000 94%,transparent)";
-const canvasBg = "radial-gradient(1300px 740px at 50% -8%, #223159, #0C1024 60%)";
+const canvasBg = PAGE_BG;
 const canvasCenter: CSSProperties = { minHeight: "100vh", background: canvasBg, color: INK, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 };
 const mobileCanvas: CSSProperties = {
   minHeight: "100vh",
@@ -567,7 +572,7 @@ const stage: CSSProperties = {
   borderRadius: 24,
   overflow: "hidden",
   position: "relative",
-  background: "radial-gradient(120% 100% at 50% 0%, #1a1428, #08060e)",
+  background: STAGE_BG,
   border: "1px solid rgba(255,255,255,.08)",
   boxShadow: "0 40px 100px -40px #000",
   display: "flex",

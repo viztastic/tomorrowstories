@@ -1,4 +1,4 @@
-import { config } from "./config.js";
+import { config, DEFAULT_PALETTE_ID } from "./config.js";
 import type { EventItem, EventDTO, VideoItem, VideoDTO } from "./types.js";
 
 export function eventToDTO(e: EventItem, opts: { admin?: boolean } = {}): EventDTO {
@@ -7,6 +7,9 @@ export function eventToDTO(e: EventItem, opts: { admin?: boolean } = {}): EventD
     code: e.code,
     name: e.name,
     themes: e.themes,
+    // Legacy events created before palettes have no `palette` — resolve to the
+    // default so the client always receives a concrete id.
+    palette: e.palette || DEFAULT_PALETTE_ID,
     attendeeUrl: `${config.siteBaseUrl}/e/${e.eventId}`,
     bigScreenUrl: `${config.siteBaseUrl}/e/${e.eventId}/big`,
     createdAt: e.createdAt,

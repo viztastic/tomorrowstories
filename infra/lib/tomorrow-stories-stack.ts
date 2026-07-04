@@ -222,7 +222,7 @@ export class TomorrowStoriesStack extends Stack {
     const httpApi = new apigw.HttpApi(this, "Api", {
       corsPreflight: {
         allowOrigins: ["*"],
-        allowMethods: [apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.DELETE, apigw.CorsHttpMethod.OPTIONS],
+        allowMethods: [apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.PATCH, apigw.CorsHttpMethod.DELETE, apigw.CorsHttpMethod.OPTIONS],
         allowHeaders: ["content-type", "x-admin-key"],
       },
     });
@@ -233,6 +233,7 @@ export class TomorrowStoriesStack extends Stack {
       [apigw.HttpMethod.GET, "/join/{code}"],
       [apigw.HttpMethod.GET, "/events/{eventId}"],
       [apigw.HttpMethod.DELETE, "/events/{eventId}"],
+      [apigw.HttpMethod.PATCH, "/events/{eventId}"],
       [apigw.HttpMethod.POST, "/events/{eventId}/uploads"],
       [apigw.HttpMethod.GET, "/events/{eventId}/videos"],
       [apigw.HttpMethod.POST, "/events/{eventId}/videos/{videoId}/like"],
