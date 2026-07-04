@@ -108,4 +108,7 @@ export const demo = {
     if (v) v.likes += 1;
     return v?.likes ?? 0;
   },
+  deleteEvent(eventId: string): void {
+    store.delete(eventId);
+  },
 };

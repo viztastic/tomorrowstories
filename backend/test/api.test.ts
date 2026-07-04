@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockClient } from "aws-sdk-client-mock";
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { BatchWriteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
 // Mock the presigned-POST generator so createUpload doesn't hit S3.
 vi.mock("@aws-sdk/s3-presigned-post", () => ({
@@ -10,6 +11,7 @@ vi.mock("@aws-sdk/s3-presigned-post", () => ({
 import { handler } from "../src/api.js";
 
 const ddb = mockClient(DynamoDBDocumentClient);
+const s3 = mockClient(S3Client);
 
 type EvOpts = { body?: unknown; path?: Record<string, string>; headers?: Record<string, string> };
 function ev(method: string, rawPath: string, opts: EvOpts = {}): any {
@@ -37,7 +39,7 @@ function parse(res: any) {
   return { status: res.statusCode as number, body: JSON.parse(res.body) };
 }
 
-beforeEach(() => ddb.reset());
+beforeEach(() => { ddb.reset(); s3.reset(); });
 
 describe("POST /events", () => {
   it("creates an event and writes both the event and the code mapping", async () => {
@@ -162,6 +164,49 @@ describe("GET /admin/events", () => {
     expect(status).toBe(200);
     expect(body.events).toHaveLength(1);
     expect(body.events[0].attendeeUrl).toContain("/e/abc");
+  });
+});
+
+describe("DELETE /events/{id}", () => {
+  it("401s without the admin password", async () => {
+    const { status } = parse(
+      await handler(ev("DELETE", "/events/abc", { path: { eventId: "abc" }, headers: { "x-admin-key": "nope" } }))
+    );
+    expect(status).toBe(401);
+  });
+
+  it("404s a missing event", async () => {
+    ddb.on(GetCommand).resolves({});
+    const { status } = parse(
+      await handler(ev("DELETE", "/events/ghost", { path: { eventId: "ghost" }, headers: { "x-admin-key": "s3cr3t-admin-key" } }))
+    );
+    expect(status).toBe(404);
+  });
+
+  it("deletes the event metadata, its videos, and its raw+media files", async () => {
+    ddb.on(GetCommand).resolves({ Item: THEME_EVENT });
+    ddb.on(QueryCommand).resolves({
+      Items: [
+        { eventId: "abc", videoId: "v1", title: "A", theme: "human", author: "M", status: "live", durationSec: 30, likes: 0, rawKey: "media/abc/v1.mov", mediaKey: "media/abc/v1.mov", createdAt: "2026-07-01T00:00:02Z" },
+        { eventId: "abc", videoId: "v2", title: "B", theme: "human", author: "N", status: "live", durationSec: 20, likes: 0, rawKey: "media/abc/v2.mov", mediaKey: "media/abc/v2.mov", createdAt: "2026-07-01T00:00:01Z" },
+      ],
+    });
+    ddb.on(BatchWriteCommand).resolves({});
+    s3.on(ListObjectsV2Command).resolves({ Contents: [{ Key: "media/abc/v1.mov" }], IsTruncated: false });
+    s3.on(DeleteObjectsCommand).resolves({});
+
+    const { status, body } = parse(
+      await handler(ev("DELETE", "/events/abc", { path: { eventId: "abc" }, headers: { "x-admin-key": "s3cr3t-admin-key" } }))
+    );
+
+    expect(status).toBe(200);
+    expect(body.deleted).toBe(true);
+    expect(body.videos).toBe(2);
+    // one BatchWrite (meta + code + 2 videos = 4 keys, one chunk)
+    expect(ddb.commandCalls(BatchWriteCommand).length).toBeGreaterThanOrEqual(1);
+    // both prefixes (media/ and raw/) listed + purged
+    expect(s3.commandCalls(ListObjectsV2Command).length).toBe(2);
+    expect(s3.commandCalls(DeleteObjectsCommand).length).toBe(2);
   });
 });
 

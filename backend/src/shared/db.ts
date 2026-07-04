@@ -1,5 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
+  BatchWriteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
@@ -134,6 +135,32 @@ export async function setVideoOutcome(
       ExpressionAttributeValues: values,
     })
   );
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Delete an entire event: every video item, then the META item + short-code
+ * mapping LAST. Ordering matters: if a chunk fails after retries we throw, and
+ * because META is deleted last the event still resolves and stays re-deletable —
+ * never leaving orphaned videos under a vanished event. Batched in chunks of 25
+ * (BatchWrite's limit) with exponential backoff on UnprocessedItems.
+ */
+export async function deleteEvent(eventId: string, code: string, videoIds: string[]): Promise<void> {
+  const keys: Record<string, string>[] = [
+    ...videoIds.map((id) => ({ PK: eventPK(eventId), SK: videoSK(id) })),
+    { PK: eventPK(eventId), SK: "META" },
+    { PK: codePK(code), SK: "CODE" },
+  ];
+  for (let i = 0; i < keys.length; i += 25) {
+    let batch = keys.slice(i, i + 25).map((Key) => ({ DeleteRequest: { Key } }));
+    for (let attempt = 0; attempt < 8 && batch.length; attempt++) {
+      const res = await doc.send(new BatchWriteCommand({ RequestItems: { [config.tableName]: batch } }));
+      batch = (res.UnprocessedItems?.[config.tableName] ?? []) as typeof batch;
+      if (batch.length) await sleep(2 ** attempt * 50);
+    }
+    if (batch.length) throw new Error(`deleteEvent: ${batch.length} item(s) left unprocessed for ${eventId}`);
+  }
 }
 
 /** Atomic like increment; returns the new total. */
