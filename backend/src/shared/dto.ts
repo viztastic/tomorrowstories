@@ -1,7 +1,7 @@
 import { config } from "./config.js";
 import type { EventItem, EventDTO, VideoItem, VideoDTO } from "./types.js";
 
-export function eventToDTO(e: EventItem): EventDTO {
+export function eventToDTO(e: EventItem, opts: { admin?: boolean } = {}): EventDTO {
   return {
     eventId: e.eventId,
     code: e.code,
@@ -10,6 +10,8 @@ export function eventToDTO(e: EventItem): EventDTO {
     attendeeUrl: `${config.siteBaseUrl}/e/${e.eventId}`,
     bigScreenUrl: `${config.siteBaseUrl}/e/${e.eventId}/big`,
     createdAt: e.createdAt,
+    // Creator IP is PII-ish — only surface it on the admin console, never to attendees.
+    ...(opts.admin && e.creatorIp ? { creatorIp: e.creatorIp } : {}),
   };
 }
 

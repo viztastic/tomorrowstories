@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
-import { S3Client } from "@aws-sdk/client-s3";
+import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { config, DEFAULT_THEMES } from "./shared/config.js";
 import {
@@ -12,6 +12,7 @@ import {
   putCodeMapping,
   getEventIdByCode,
   listAllEvents,
+  deleteEvent,
 } from "./shared/db.js";
 import { newEventCode, newEventId, newVideoId } from "./shared/ids.js";
 import { eventToDTO, videoToDTO } from "./shared/dto.js";
@@ -54,6 +55,10 @@ export async function handler(
       // GET /events/{eventId}
       if (method === "GET" && !p.videoId && event.rawPath.endsWith(`/events/${p.eventId}`)) {
         return await getEventRoute(p.eventId);
+      }
+      // DELETE /events/{eventId}  (admin: remove the event + its videos + files)
+      if (method === "DELETE" && !p.videoId && event.rawPath.endsWith(`/events/${p.eventId}`)) {
+        return await deleteEventRoute(p.eventId, event);
       }
       // POST /events/{eventId}/uploads
       if (method === "POST" && event.rawPath.endsWith("/uploads")) {
@@ -107,6 +112,7 @@ async function createEvent(event: APIGatewayProxyEventV2): Promise<APIGatewayPro
     name: name.slice(0, 80),
     themes: DEFAULT_THEMES,
     createdAt: new Date().toISOString(),
+    creatorIp: event.requestContext.http.sourceIp,
   };
   await putEvent(item);
   await putCodeMapping(code, eventId);
@@ -119,12 +125,55 @@ async function joinByCode(code: string): Promise<APIGatewayProxyResultV2> {
   return ok({ eventId });
 }
 
-async function adminList(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  if (!config.adminPassword) return notFound("Admin console is disabled");
+/** Shared-secret guard for the organizer console. Throws 404 if disabled, 401 if wrong. */
+function requireAdmin(event: APIGatewayProxyEventV2): void {
+  if (!config.adminPassword) throw new HttpError(404, "Admin console is disabled");
   const key = event.headers?.["x-admin-key"] ?? event.queryStringParameters?.key ?? "";
-  if (key !== config.adminPassword) return json(401, { error: "Wrong password" });
-  const events = (await listAllEvents()).map(eventToDTO);
+  if (key !== config.adminPassword) throw new HttpError(401, "Wrong password");
+}
+
+async function adminList(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  requireAdmin(event);
+  const events = (await listAllEvents()).map((e) => eventToDTO(e, { admin: true }));
   return ok({ events });
+}
+
+async function deleteEventRoute(
+  eventId: string,
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
+  requireAdmin(event);
+  const e = await getEvent(eventId);
+  if (!e) return notFound("Event not found");
+  const videos = await listVideos(eventId);
+  // Metadata first, then the files. If a file delete fails the metadata is
+  // already gone, so the event disappears from the wall/admin either way.
+  await deleteEvent(eventId, e.code, videos.map((v) => v.videoId));
+  await Promise.all([
+    deletePrefix(config.mediaBucket, `media/${eventId}/`),
+    deletePrefix(config.rawBucket, `raw/${eventId}/`),
+  ]);
+  return ok({ deleted: true, videos: videos.length });
+}
+
+/** Delete every object under a key prefix (paged; 1000 keys per DeleteObjects call). */
+async function deletePrefix(bucket: string, prefix: string): Promise<void> {
+  let token: string | undefined;
+  do {
+    const list = await s3.send(
+      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token })
+    );
+    const objects = (list.Contents ?? []).map((o) => ({ Key: o.Key! }));
+    if (objects.length) {
+      const del = await s3.send(
+        new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: objects, Quiet: true } })
+      );
+      if (del.Errors?.length) {
+        throw new Error(`Failed to delete ${del.Errors.length} object(s) from ${bucket}`);
+      }
+    }
+    token = list.IsTruncated ? list.NextContinuationToken : undefined;
+  } while (token);
 }
 
 async function getEventRoute(eventId: string): Promise<APIGatewayProxyResultV2> {

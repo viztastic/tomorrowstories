@@ -159,6 +159,18 @@ export class TomorrowStoriesStack extends Stack {
     table.grantReadWriteData(apiFn);
     rawBucket.grantPut(apiFn); // presigned POST is signed with the Lambda's creds
     mediaBucket.grantPut(apiFn); // no-transcode mode uploads straight to media
+    // Admin "delete event" enumerates + removes that event's raw/media objects.
+    apiFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:ListBucket", "s3:DeleteObject"],
+        resources: [
+          rawBucket.bucketArn,
+          rawBucket.arnForObjects("*"),
+          mediaBucket.bucketArn,
+          mediaBucket.arnForObjects("*"),
+        ],
+      })
+    );
 
     const onRawUploadFn = new NodejsFunction(this, "OnRawUploadFn", {
       ...fnDefaults,
@@ -205,8 +217,8 @@ export class TomorrowStoriesStack extends Stack {
     const httpApi = new apigw.HttpApi(this, "Api", {
       corsPreflight: {
         allowOrigins: ["*"],
-        allowMethods: [apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.OPTIONS],
-        allowHeaders: ["content-type"],
+        allowMethods: [apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.DELETE, apigw.CorsHttpMethod.OPTIONS],
+        allowHeaders: ["content-type", "x-admin-key"],
       },
     });
     const integration = new HttpLambdaIntegration("ApiIntegration", apiFn);
@@ -215,6 +227,7 @@ export class TomorrowStoriesStack extends Stack {
       [apigw.HttpMethod.GET, "/admin/events"],
       [apigw.HttpMethod.GET, "/join/{code}"],
       [apigw.HttpMethod.GET, "/events/{eventId}"],
+      [apigw.HttpMethod.DELETE, "/events/{eventId}"],
       [apigw.HttpMethod.POST, "/events/{eventId}/uploads"],
       [apigw.HttpMethod.GET, "/events/{eventId}/videos"],
       [apigw.HttpMethod.POST, "/events/{eventId}/videos/{videoId}/like"],

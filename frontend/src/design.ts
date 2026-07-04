@@ -98,7 +98,10 @@ export function GlobalStyle() {
     el.textContent = `
       *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
       html,body,#root{margin:0;min-height:100%;}
-      html,body{overflow-x:hidden;overscroll-behavior:none;}
+      /* clip (not hidden) prevents horizontal overflow WITHOUT making body a
+         scroll container, so vertical trackpad scrolling keeps working. The
+         hidden fallback runs first for browsers without overflow:clip support. */
+      html,body{overflow-x:hidden;overflow-x:clip;overscroll-behavior:none;}
       body{background:#0C1024;color:${INK};font-family:${FONT_UI};max-width:100vw;}
       button{font-family:inherit;}
       ::-webkit-scrollbar{width:0px;height:0px;}

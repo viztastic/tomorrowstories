@@ -65,6 +65,15 @@ export const api = {
     return r.likes;
   },
 
+  /** Admin: delete an event and all its videos + files. Guarded by the password. */
+  async deleteEvent(eventId: string, key: string): Promise<void> {
+    if (DEMO || !(await getApiUrl())) {
+      demo.deleteEvent(eventId);
+      return;
+    }
+    await req<{ deleted: boolean }>(`/events/${eventId}`, { method: "DELETE", headers: { "x-admin-key": key } });
+  },
+
   /**
    * Full upload: create the video record + presigned POST, then PUT the file to
    * S3. In demo mode it just registers the clip locally. Returns the new video.

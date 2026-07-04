@@ -19,6 +19,7 @@ export interface EventItem {
   name: string;
   themes: Theme[];
   createdAt: string;
+  creatorIp?: string; // source IP that created the event (admin-only)
 }
 
 /** DynamoDB item for a video. PK=EVENT#<id>, SK=VIDEO#<videoId> */
@@ -49,6 +50,7 @@ export interface EventDTO {
   attendeeUrl: string;
   bigScreenUrl: string;
   createdAt: string;
+  creatorIp?: string; // only populated on the admin sessions list
 }
 
 export interface VideoDTO {

@@ -10,30 +10,59 @@ import { Grain, PlayBadge, Spinner } from "../common";
  * clip is live, the real muted clip loops on top and fades in once it's actually
  * playing — used on the big screen so the wall shows moving video, not stills.
  *
- * In no-transcode mode a clip's record is marked "live" the instant it's created
- * — before the phone has finished the S3 upload — so the first few loads can 404.
- * A `<video>` that has errored won't re-fetch on its own, so we retry `.load()`
- * with backoff until the object lands; only then does it fade in over the still.
+ * Playback is driven explicitly with `.play()` rather than the `autoPlay`
+ * attribute, which is unreliable in a React SPA (the element mounts mid-render,
+ * inside an animated column). And in no-transcode mode a clip's record is marked
+ * "live" the instant it's created — before the phone finishes the S3 upload — so
+ * the first loads can 404. So we retry `.load()` + `.play()` with backoff until
+ * the object lands and playback actually starts; only then does it fade in. This
+ * is why the wall now fills in on its own, with no page refresh needed.
  */
 export function Thumb({ video, theme, autoPlay = false }: { video: VideoDTO; theme: Theme; autoPlay?: boolean }) {
-  const [playing, setPlaying] = useState(false);
+  const [visible, setVisible] = useState(false);
   const ref = useRef<HTMLVideoElement>(null);
-  const retries = useRef(0);
+  const attempts = useRef(0);
+  const pending = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backdrop = video.posterUrl
     ? `#000 url(${video.posterUrl}) center/cover no-repeat`
     : stillBg(pairFor(theme, video.id));
   const canPlay = autoPlay && !!video.mediaUrl && video.status === "live";
 
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-
-  function handleError() {
-    setPlaying(false);
-    if (retries.current >= 20) return; // give up after ~2 min (upload abandoned)
-    const delay = Math.min(2000 + retries.current * 1000, 8000);
-    retries.current += 1;
-    timer.current = setTimeout(() => ref.current?.load(), delay);
-  }
+  useEffect(() => {
+    if (!canPlay) { setVisible(false); return; }
+    const el = ref.current;
+    if (!el) return;
+    let cancelled = false;
+    attempts.current = 0;
+    pending.current = false;
+    const clear = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } };
+    // `error` (a 404 while still uploading) and the play() rejection can both fire
+    // for one failed load; `pending` collapses them into a single retry so the
+    // 40-attempt (~a few minutes) budget isn't burned twice per cycle.
+    const schedule = () => {
+      if (cancelled || pending.current || attempts.current >= 40) return;
+      pending.current = true;
+      attempts.current += 1;
+      clear();
+      const delay = Math.min(1200 + attempts.current * 600, 6000);
+      timer.current = setTimeout(() => {
+        pending.current = false;
+        if (cancelled || !ref.current) return;
+        ref.current.load(); // re-fetch — the object may have just finished uploading
+        kick();
+      }, delay);
+    };
+    const kick = () => {
+      if (cancelled || !ref.current) return;
+      const p = ref.current.play();
+      if (p) p.then(() => { attempts.current = 0; }, () => schedule());
+    };
+    const onErr = () => { setVisible(false); schedule(); };
+    el.addEventListener("error", onErr);
+    kick();
+    return () => { cancelled = true; clear(); el.removeEventListener("error", onErr); };
+  }, [canPlay, video.mediaUrl]);
 
   return (
     <div style={{ position: "absolute", inset: 0, background: backdrop }}>
@@ -43,18 +72,16 @@ export function Thumb({ video, theme, autoPlay = false }: { video: VideoDTO; the
           src={video.mediaUrl!}
           muted
           loop
-          autoPlay
           playsInline
           preload="auto"
-          onPlaying={() => { retries.current = 0; setPlaying(true); }}
-          onError={handleError}
+          onPlaying={() => { attempts.current = 0; setVisible(true); }}
           style={{
             position: "absolute",
             inset: 0,
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            opacity: playing ? 1 : 0,
+            opacity: visible ? 1 : 0,
             transition: "opacity .6s ease",
           }}
         />

@@ -5,3 +5,8 @@ cdk.out/
 .env.local
 *.log
 .DS_Store
+# Local secrets / deploy state — never commit
+.admin-key
+.transcode-mode
+# Build artifacts
+*.tsbuildinfo

@@ -5,6 +5,7 @@ import { api } from "../api";
 import { DEMO } from "../config";
 import { ACCENT, BRAND_GRAD, FONT_DISPLAY, INK, MUTED, MUTED2 } from "../design";
 import { Spinner } from "./common";
+import { buildArchive, slug } from "../export";
 import type { EventDTO } from "../types";
 
 const KEY = "ts:adminKey";
@@ -93,7 +94,12 @@ export function Admin() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {events.map((e) => (
-            <SessionCard key={e.eventId} ev={e} />
+            <SessionCard
+              key={e.eventId}
+              ev={e}
+              adminKey={savedKey}
+              onDeleted={() => setEvents((prev) => prev.filter((x) => x.eventId !== e.eventId))}
+            />
           ))}
         </div>
       </div>
@@ -101,17 +107,88 @@ export function Admin() {
   );
 }
 
-function SessionCard({ ev }: { ev: EventDTO }) {
+function SessionCard({ ev, adminKey, onDeleted }: { ev: EventDTO; adminKey: string; onDeleted: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState<"" | "delete" | "download">("");
+  const [dl, setDl] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function doDelete() {
+    setBusy("delete");
+    setErr(null);
+    try {
+      await api.deleteEvent(ev.eventId, adminKey);
+      onDeleted();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Delete failed");
+      setBusy("");
+      setConfirming(false);
+    }
+  }
+
+  async function download() {
+    setBusy("download");
+    setErr(null);
+    setDl("Preparing…");
+    try {
+      const { event, videos } = await api.listVideos(ev.eventId);
+      const live = videos.filter((v) => v.status === "live" && v.mediaUrl);
+      if (live.length === 0) {
+        setErr("No live videos to download yet.");
+        setDl(null);
+        return;
+      }
+      const blob = await buildArchive(event, videos, (done, total) => setDl(`Downloading ${done}/${total}…`));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${slug(ev.name)}-wall.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setDl("Downloaded ✓");
+      setTimeout(() => setDl(null), 2500);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Download failed");
+      setDl(null);
+    } finally {
+      setBusy("");
+    }
+  }
+
   return (
     <div style={card}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 18 }}>{ev.name}</span>
         <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: "#0C0A12", background: "#F4F1EC", padding: "3px 9px", borderRadius: 999 }}>{ev.code}</span>
+        {ev.creatorIp && (
+          <span title="Creator IP" style={{ fontSize: 11.5, fontWeight: 700, color: "#C9C6D4", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", padding: "3px 9px", borderRadius: 8, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>⚲ {ev.creatorIp}</span>
+        )}
         <span style={{ fontSize: 12, color: MUTED2, marginLeft: "auto" }}>{fmtDate(ev.createdAt)}</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
         <LinkRow label="Attendee" url={ev.attendeeUrl} />
         <LinkRow label="Big screen" url={ev.bigScreenUrl} />
+      </div>
+      {err && <div style={{ ...errBox, marginTop: 12 }}>{err}</div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+        <button onClick={download} disabled={!!busy} style={chip}>
+          {busy === "download" ? dl ?? "Working…" : "⬇ Download archive"}
+        </button>
+        {dl && busy !== "download" && <span style={{ fontSize: 12.5, color: MUTED, fontWeight: 700 }}>{dl}</span>}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          {confirming ? (
+            <>
+              <button onClick={() => setConfirming(false)} disabled={busy === "delete"} style={chip}>Cancel</button>
+              <button onClick={doDelete} disabled={!!busy} style={dangerBtn}>
+                {busy === "delete" ? "Deleting…" : "Confirm delete"}
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setConfirming(true)} disabled={!!busy} style={dangerGhost}>Delete</button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -170,4 +247,6 @@ const primaryBtn: CSSProperties = { width: "100%", padding: 15, borderRadius: 14
 const ghostBtn: CSSProperties = { padding: "9px 16px", borderRadius: 999, border: "1px solid rgba(255,255,255,.16)", background: "transparent", color: INK, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" };
 const chip: CSSProperties = { flex: "none", padding: "7px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,.14)", background: "rgba(255,255,255,.05)", color: INK, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };
 const linkRow: CSSProperties = { display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 12, padding: "9px 11px" };
+const dangerGhost: CSSProperties = { flex: "none", padding: "7px 14px", borderRadius: 10, border: "1px solid rgba(255,61,87,.4)", background: "transparent", color: "#FF7A9C", fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };
+const dangerBtn: CSSProperties = { flex: "none", padding: "7px 14px", borderRadius: 10, border: "none", background: "#E23558", color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };
 const errBox: CSSProperties = { marginTop: 14, padding: "10px 13px", borderRadius: 12, background: "rgba(255,61,87,.12)", border: "1px solid rgba(255,61,87,.35)", color: "#FF9DB0", fontSize: 13, fontWeight: 600 };

@@ -16,6 +16,7 @@ export interface EventDTO {
   attendeeUrl: string;
   bigScreenUrl: string;
   createdAt: string;
+  creatorIp?: string; // only present on the admin sessions list
 }
 
 export interface VideoDTO {
