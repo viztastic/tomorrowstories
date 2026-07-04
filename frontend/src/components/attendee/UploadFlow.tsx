@@ -5,8 +5,10 @@ import { api } from "../../api";
 import { BRAND_GRAD, fmtDur, MUTED, pairFor, stillBg, themeById } from "../../design";
 import { Spinner } from "../common";
 
-type Step = 1 | 2 | 3 | 4 | 5;
-const STEP_LABELS = ["", "Record", "Trim", "Details", "Review"];
+// Record → Details → Review, then the done screen (step 4). There's no trim
+// step — the full clip goes up, so picking a file jumps straight to details.
+type Step = 1 | 2 | 3 | 4;
+const STEP_LABELS = ["", "Record", "Details", "Review"];
 
 export function UploadFlow({
   eventId,
@@ -53,7 +55,7 @@ export function UploadFlow({
     setStep(2);
   }
 
-  const canContinue = step !== 3 || (!!themeId && !!title.trim());
+  const canContinue = step !== 2 || (!!themeId && !!title.trim());
 
   function next() {
     if (!canContinue) return;
@@ -91,7 +93,7 @@ export function UploadFlow({
       );
       onUploaded(v);
       setPostedStatus(v.status);
-      setStep(5);
+      setStep(4);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -100,7 +102,7 @@ export function UploadFlow({
   }
 
   // ---- Done screen ----
-  if (step === 5) {
+  if (step === 4) {
     return (
       <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", background: "#0B0812" }}>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" }}>
@@ -151,7 +153,7 @@ export function UploadFlow({
       </div>
 
       <div style={{ flex: "none", height: 4, margin: "8px 16px 0", borderRadius: 2, background: "rgba(255,255,255,.08)" }}>
-        <div style={{ width: `${(Math.min(step, 4) / 4) * 100}%`, height: "100%", borderRadius: 2, background: BRAND_GRAD, transition: "width .3s" }} />
+        <div style={{ width: `${(Math.min(step, 3) / 3) * 100}%`, height: "100%", borderRadius: 2, background: BRAND_GRAD, transition: "width .3s" }} />
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "18px 16px" }}>
@@ -178,24 +180,6 @@ export function UploadFlow({
 
         {step === 2 && (
           <>
-            <div style={h1}>Preview</div>
-            <div style={sub}>Check your best moment. Trimming lands in a later update — for now the full clip goes up.</div>
-            <div style={{ position: "relative", marginTop: 20, borderRadius: 22, overflow: "hidden", aspectRatio: "10 / 12", background: "#000" }}>
-              {fileUrl ? (
-                <video src={fileUrl} controls playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-              ) : (
-                <div style={fillBg} />
-              )}
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, color: "#9E99AD", marginTop: 12 }}>
-              <span>Selected clip</span>
-              <span style={{ color: "#F4F1EC" }}>{fmtDur(durationSec)}</span>
-            </div>
-          </>
-        )}
-
-        {step === 3 && (
-          <>
             <div style={h1}>Add details</div>
             <div style={sub}>Your name, a title and a theme help people find it.</div>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#8B8698", margin: "20px 0 8px", letterSpacing: ".03em" }}>YOUR NAME</div>
@@ -216,7 +200,7 @@ export function UploadFlow({
           </>
         )}
 
-        {step === 4 && (
+        {step === 3 && (
           <>
             <div style={h1}>Ready to post?</div>
             <div style={sub}>This goes live on the wall right away.</div>
@@ -247,12 +231,14 @@ export function UploadFlow({
       </div>
 
       <div style={{ flex: "none", padding: "12px 16px calc(18px + env(safe-area-inset-bottom))" }}>
-        {step === 4 ? (
+        {step === 3 ? (
           <button onClick={submit} disabled={uploading} style={{ width: "100%", padding: 15, borderRadius: 15, border: "none", background: BRAND_GRAD, color: "#fff", fontWeight: 800, fontSize: 15, cursor: uploading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: uploading ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}>
             {uploading && <Spinner size={18} />}
             {uploading ? (progress < 100 ? `Uploading… ${progress}%` : "Finishing…") : "Post to the wall"}
           </button>
-        ) : step >= 2 && step <= 3 ? (
+        ) : step === 2 || (step === 1 && file) ? (
+          // Step 1 keeps a Continue once a clip is picked, so backing out of
+          // Details doesn't strand you re-picking the same file.
           <button onClick={next} style={{ width: "100%", padding: 15, borderRadius: 15, border: "none", cursor: canContinue ? "pointer" : "not-allowed", fontFamily: "inherit", fontWeight: 800, fontSize: 15, color: canContinue ? "#fff" : "#726D82", background: canContinue ? BRAND_GRAD : "rgba(255,255,255,.06)" }}>
             Continue
           </button>
