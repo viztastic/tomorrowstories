@@ -1,0 +1,178 @@
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { mockClient } from "aws-sdk-client-mock";
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+
+// Mock the presigned-POST generator so createUpload doesn't hit S3.
+vi.mock("@aws-sdk/s3-presigned-post", () => ({
+  createPresignedPost: vi.fn(async () => ({ url: "https://raw-bucket.s3.amazonaws.com", fields: { key: "raw/x" } })),
+}));
+
+import { handler } from "../src/api.js";
+
+const ddb = mockClient(DynamoDBDocumentClient);
+
+type EvOpts = { body?: unknown; path?: Record<string, string>; headers?: Record<string, string> };
+function ev(method: string, rawPath: string, opts: EvOpts = {}): any {
+  return {
+    requestContext: { http: { method } },
+    rawPath,
+    pathParameters: opts.path ?? {},
+    headers: opts.headers ?? {},
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    isBase64Encoded: false,
+  };
+}
+
+const THEME_EVENT = {
+  PK: "EVENT#abc",
+  SK: "META",
+  eventId: "abc",
+  code: "XY12Z3",
+  name: "Demo",
+  themes: [{ id: "human", name: "Human & Machine", color: "#8B5CF6" }],
+  createdAt: "2026-07-01T00:00:00Z",
+};
+
+function parse(res: any) {
+  return { status: res.statusCode as number, body: JSON.parse(res.body) };
+}
+
+beforeEach(() => ddb.reset());
+
+describe("POST /events", () => {
+  it("creates an event and writes both the event and the code mapping", async () => {
+    ddb.on(GetCommand).resolves({}); // code-uniqueness check: not taken
+    ddb.on(PutCommand).resolves({});
+
+    const { status, body } = parse(await handler(ev("POST", "/events", { body: { name: "My Event" } })));
+
+    expect(status).toBe(201);
+    expect(body.eventId).toMatch(/^[0-9a-z]{16}$/);
+    expect(body.code).toMatch(/^[0-9A-Z]{6}$/);
+    expect(body.attendeeUrl).toContain(`/e/${body.eventId}`);
+    // one Put for the event, one for the CODE# mapping
+    expect(ddb.commandCalls(PutCommand)).toHaveLength(2);
+  });
+});
+
+describe("GET /join/{code}", () => {
+  it("resolves a known code to its eventId", async () => {
+    ddb.on(GetCommand).resolves({ Item: { eventId: "abc" } });
+    const { status, body } = parse(await handler(ev("GET", "/join/XY12Z3", { path: { code: "XY12Z3" } })));
+    expect(status).toBe(200);
+    expect(body.eventId).toBe("abc");
+  });
+
+  it("404s an unknown code", async () => {
+    ddb.on(GetCommand).resolves({});
+    const { status } = parse(await handler(ev("GET", "/join/NOPE12", { path: { code: "NOPE12" } })));
+    expect(status).toBe(404);
+  });
+});
+
+describe("GET /events/{id}/videos", () => {
+  it("returns live + processing videos as DTOs", async () => {
+    ddb.on(GetCommand).resolves({ Item: THEME_EVENT });
+    ddb.on(QueryCommand).resolves({
+      Items: [
+        { eventId: "abc", videoId: "v1", title: "A", theme: "human", author: "M", status: "live", durationSec: 30, likes: 2, rawKey: "r", mediaKey: "media/abc/v1/v1video.mp4", createdAt: "2026-07-01T00:00:02Z" },
+        { eventId: "abc", videoId: "v2", title: "B", theme: "human", author: "N", status: "processing", durationSec: 20, likes: 0, rawKey: "r2", createdAt: "2026-07-01T00:00:01Z" },
+      ],
+    });
+
+    const { status, body } = parse(await handler(ev("GET", "/events/abc/videos", { path: { eventId: "abc" } })));
+    expect(status).toBe(200);
+    expect(body.videos).toHaveLength(2);
+    expect(body.videos[0].mediaUrl).toContain("https://cdn.example.com/media/abc/v1/");
+    expect(body.videos[1].mediaUrl).toBeNull();
+  });
+
+  it("404s when the event doesn't exist", async () => {
+    ddb.on(GetCommand).resolves({});
+    const { status } = parse(await handler(ev("GET", "/events/ghost/videos", { path: { eventId: "ghost" } })));
+    expect(status).toBe(404);
+  });
+});
+
+describe("POST like", () => {
+  it("increments and returns the new like count", async () => {
+    ddb.on(GetCommand).resolves({ Item: { eventId: "abc", videoId: "v1" } });
+    ddb.on(UpdateCommand).resolves({ Attributes: { likes: 5 } });
+    const { status, body } = parse(
+      await handler(ev("POST", "/events/abc/videos/v1/like", { path: { eventId: "abc", videoId: "v1" } }))
+    );
+    expect(status).toBe(200);
+    expect(body.likes).toBe(5);
+  });
+});
+
+describe("POST /events/{id}/uploads", () => {
+  beforeEach(() => {
+    ddb.on(GetCommand).resolves({ Item: THEME_EVENT });
+    ddb.on(PutCommand).resolves({});
+  });
+
+  it("creates a video record + presigned upload", async () => {
+    const { status, body } = parse(
+      await handler(
+        ev("POST", "/events/abc/uploads", {
+          path: { eventId: "abc" },
+          body: { title: "My clip", theme: "human", contentType: "video/mp4", durationSec: 40 },
+        })
+      )
+    );
+    expect(status).toBe(201);
+    expect(body.video.status).toBe("processing");
+    expect(body.upload.url).toContain("s3");
+  });
+
+  it("rejects a missing title", async () => {
+    const { status } = parse(
+      await handler(ev("POST", "/events/abc/uploads", { path: { eventId: "abc" }, body: { theme: "human", contentType: "video/mp4" } }))
+    );
+    expect(status).toBe(400);
+  });
+
+  it("rejects an unknown theme", async () => {
+    const { status } = parse(
+      await handler(ev("POST", "/events/abc/uploads", { path: { eventId: "abc" }, body: { title: "x", theme: "nope", contentType: "video/mp4" } }))
+    );
+    expect(status).toBe(400);
+  });
+
+  it("rejects an unsupported content type", async () => {
+    const { status } = parse(
+      await handler(ev("POST", "/events/abc/uploads", { path: { eventId: "abc" }, body: { title: "x", theme: "human", contentType: "application/pdf" } }))
+    );
+    expect(status).toBe(400);
+  });
+});
+
+describe("GET /admin/events", () => {
+  it("401s without the right password", async () => {
+    const { status } = parse(await handler(ev("GET", "/admin/events", { headers: { "x-admin-key": "nope" } })));
+    expect(status).toBe(401);
+  });
+
+  it("returns all sessions with the right password", async () => {
+    ddb.on(ScanCommand).resolves({ Items: [THEME_EVENT] });
+    const { status, body } = parse(
+      await handler(ev("GET", "/admin/events", { headers: { "x-admin-key": "s3cr3t-admin-key" } }))
+    );
+    expect(status).toBe(200);
+    expect(body.events).toHaveLength(1);
+    expect(body.events[0].attendeeUrl).toContain("/e/abc");
+  });
+});
+
+describe("routing", () => {
+  it("CORS preflight returns 204", async () => {
+    const res: any = await handler(ev("OPTIONS", "/events"));
+    expect(res.statusCode).toBe(204);
+  });
+
+  it("unknown route returns 404", async () => {
+    const { status } = parse(await handler(ev("GET", "/nonsense")));
+    expect(status).toBe(404);
+  });
+});

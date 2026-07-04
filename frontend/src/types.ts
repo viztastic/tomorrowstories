@@ -1,0 +1,39 @@
+// Wire shapes returned by the API. Keep in sync with backend/src/shared/types.ts.
+
+export interface Theme {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export type VideoStatus = "processing" | "live" | "failed";
+
+export interface EventDTO {
+  eventId: string;
+  code: string;
+  name: string;
+  themes: Theme[];
+  attendeeUrl: string;
+  bigScreenUrl: string;
+  createdAt: string;
+}
+
+export interface VideoDTO {
+  id: string;
+  title: string;
+  theme: string;
+  author: string;
+  status: VideoStatus;
+  durationSec: number;
+  likes: number;
+  mediaUrl: string | null;
+  posterUrl: string | null;
+  createdAt: string;
+}
+
+/** A comment kept client-side only in v1 (not persisted server-side). */
+export interface LocalComment {
+  n: string;
+  t: string;
+  c: string;
+}

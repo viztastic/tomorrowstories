@@ -1,0 +1,12 @@
+{
+  "name": "tomorrow-stories-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "serve": "cd ../frontend && VITE_DEMO=1 npm run build && npm run preview -- --port 4173 --strictPort",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.0"
+  }
+}
