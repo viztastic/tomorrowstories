@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { DEMO } from "../config";
 import { BRAND_GRAD, ACCENT, FONT_DISPLAY, INK, MUTED, MUTED2, PAGE_BG, THEMES } from "../design";
@@ -113,6 +113,10 @@ export function Landing({ mode = "full" }: { mode?: LandingMode }) {
   const [joining, setJoining] = useState(false);
   const [joinRaw, setJoinRaw] = useState("");
   const [err, setErr] = useState<{ scope: "join" | "create"; msg: string } | null>(null);
+
+  // A signed-in organizer has no use for the marketing/join home page — send
+  // them to their dashboard, where they can create OR join an event.
+  if (mode === "full" && clerkActive && isSignedIn) return <Navigate to="/admin" replace />;
 
   async function join() {
     const raw = joinRaw.trim();

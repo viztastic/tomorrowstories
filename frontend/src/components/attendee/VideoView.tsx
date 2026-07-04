@@ -157,27 +157,29 @@ export function VideoView({
         </div>
       </div>
 
-      <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 8, padding: "10px 14px calc(10px + env(safe-area-inset-bottom))", borderTop: "1px solid rgba(var(--ts-neutral-rgb),.07)", background: OVERLAY_BG }}>
+      <div style={{ flex: "none", display: "flex", flexDirection: "column", gap: 8, padding: "10px 14px calc(10px + env(safe-area-inset-bottom))", borderTop: "1px solid rgba(var(--ts-neutral-rgb),.07)", background: OVERLAY_BG }}>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Name"
+          placeholder="Your name (shown with your comment)"
           aria-label="Your name"
           maxLength={60}
-          style={{ width: 92, flex: "none", background: "rgba(var(--ts-neutral-rgb),.06)", border: "1px solid rgba(var(--ts-neutral-rgb),.09)", borderRadius: 999, padding: "11px 14px", color: INK, fontSize: 13.5, fontFamily: "inherit", outline: "none" }}
+          style={{ width: "100%", background: "rgba(var(--ts-neutral-rgb),.06)", border: "1px solid rgba(var(--ts-neutral-rgb),.09)", borderRadius: 999, padding: "10px 16px", color: INK, fontSize: 13.5, fontFamily: "inherit", outline: "none" }}
         />
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="Add a comment..."
-          style={{ flex: 1, minWidth: 0, background: "rgba(var(--ts-neutral-rgb),.06)", border: "1px solid rgba(var(--ts-neutral-rgb),.09)", borderRadius: 999, padding: "11px 16px", color: INK, fontSize: 14, fontFamily: "inherit", outline: "none" }}
-        />
-        <button onClick={send} disabled={!canSend} aria-label="Post comment" style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: BRAND_GRAD, display: "flex", alignItems: "center", justifyContent: "center", cursor: canSend ? "pointer" : "not-allowed", opacity: canSend ? 1 : 0.5, flex: "none" }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M4 12L20 4L14 20L11 13L4 12Z" fill="#fff" />
-          </svg>
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && send()}
+            placeholder="Add a comment..."
+            style={{ flex: 1, minWidth: 0, background: "rgba(var(--ts-neutral-rgb),.06)", border: "1px solid rgba(var(--ts-neutral-rgb),.09)", borderRadius: 999, padding: "11px 16px", color: INK, fontSize: 14, fontFamily: "inherit", outline: "none" }}
+          />
+          <button onClick={send} disabled={!canSend} aria-label="Post comment" style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: BRAND_GRAD, display: "flex", alignItems: "center", justifyContent: "center", cursor: canSend ? "pointer" : "not-allowed", opacity: canSend ? 1 : 0.5, flex: "none" }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M4 12L20 4L14 20L11 13L4 12Z" fill="#fff" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );

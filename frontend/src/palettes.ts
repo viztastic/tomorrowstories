@@ -68,22 +68,22 @@ export const PALETTES: Record<string, Palette> = {
     name: "Rally",
     accent: "#E4002B", // red — links, dots, active states (reads well on white)
     brandGrad: "linear-gradient(135deg, #E4002B, #C40024)", // solid red buttons, white text
-    ink: "#1B1613", // near-black warm text
-    muted: "#6E6660",
-    muted2: "#948B82",
-    panel: "rgba(26,22,19,.05)",
-    hairline: "rgba(26,22,19,.12)",
-    pageBg: "radial-gradient(1200px 700px at 50% -10%, #FFFFFF, #FFF3DE 82%)", // white → faint gold
+    ink: "#17181C", // near-black, neutral (not warm)
+    muted: "#63666E",
+    muted2: "#8A8E98",
+    panel: "rgba(20,21,26,.05)",
+    hairline: "rgba(20,21,26,.12)",
+    pageBg: "radial-gradient(1200px 700px at 50% -10%, #FFFFFF, #F4F6F8 92%)", // essentially white
     bodyBg: "#FFFFFF",
-    stageBg: "radial-gradient(120% 100% at 50% 0%, #FFFFFF, #FCEECF)",
+    stageBg: "radial-gradient(120% 100% at 50% 0%, #FFFFFF, #F1F3F6)",
     overlayBg: "#FFFFFF",
     danger: "#E4002B",
     dangerInk: "#C40024", // red readable on white
-    onAccent: "#1B1613",
-    neutralRgb: "26,22,19", // near-black → white-alpha surfaces become dark-on-white
-    headerBg: "rgba(255,255,255,.82)",
+    onAccent: "#17181C",
+    neutralRgb: "20,21,26", // neutral near-black → clean grey surfaces on white
+    headerBg: "rgba(255,255,255,.85)",
     chipOn: "#F5C400", // yellow active chips (the second accent)
-    chipOnInk: "#1B1613",
+    chipOnInk: "#17181C",
   },
   // Cool deep-ocean blue.
   marine: {

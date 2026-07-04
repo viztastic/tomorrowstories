@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { ACCENT, BRAND_GRAD, CHIP_ON, CHIP_ON_INK, FONT_DISPLAY, INK, MUTED, MUTED2 } from "../design";
 import { Spinner } from "./common";
@@ -12,9 +12,12 @@ import type { EventDTO, Theme } from "../types";
 
 /** Organizer dashboard — lists the events you own (route is sign-in gated). */
 export function Admin() {
+  const nav = useNavigate();
   const [events, setEvents] = useState<EventDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [joinRaw, setJoinRaw] = useState("");
+  const [joinErr, setJoinErr] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -25,11 +28,25 @@ export function Admin() {
     return () => { alive = false; };
   }, []);
 
+  async function join() {
+    const raw = joinRaw.trim();
+    if (!raw) return;
+    setJoinErr(false);
+    const link = /\/e\/([a-z0-9]+)/i.exec(raw);
+    if (link) return nav(`/e/${link[1]}`);
+    if (/^[a-z0-9]{12,}$/i.test(raw)) return nav(`/e/${raw.toLowerCase()}`);
+    try {
+      nav(`/e/${await api.resolveCode(raw)}`);
+    } catch {
+      setJoinErr(true);
+    }
+  }
+
   return (
     <div style={page}>
       <Header />
       <div style={{ width: "100%", maxWidth: 780 }}>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
           <div>
             <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 26, letterSpacing: "-.02em" }}>Your events</div>
             <div style={{ fontSize: 13, color: MUTED, marginTop: 4 }}>{events.length} event{events.length === 1 ? "" : "s"}</div>
@@ -38,6 +55,22 @@ export function Admin() {
             <Link to="/create" style={{ ...primaryBtn, width: "auto", padding: "10px 16px", textDecoration: "none" }}>New event</Link>
             <OrganizerButton />
           </div>
+        </div>
+
+        {/* Also join someone else's event as a guest, right from here. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12.5, color: MUTED2, fontWeight: 700 }}>Join an event:</span>
+          <input
+            value={joinRaw}
+            onChange={(e) => { setJoinRaw(e.target.value); setJoinErr(false); }}
+            onKeyDown={(e) => e.key === "Enter" && join()}
+            placeholder="Event code or link"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            style={{ flex: "1 1 180px", minWidth: 0, background: "rgba(var(--ts-neutral-rgb),.06)", border: `1px solid ${joinErr ? "rgba(255,61,87,.5)" : "rgba(var(--ts-neutral-rgb),.12)"}`, borderRadius: 12, padding: "9px 13px", color: INK, fontSize: 13.5, fontFamily: "inherit", outline: "none" }}
+          />
+          <button onClick={join} style={chip}>Join</button>
+          {joinErr && <span style={{ fontSize: 12.5, color: "#FF7A9C", fontWeight: 600 }}>No event with that code.</span>}
         </div>
 
         {err && <div style={errBox}>{err}</div>}

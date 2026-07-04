@@ -278,12 +278,12 @@ function Projector({
           <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "34px 30px 30px", minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
-                {/* Hovering LIVE NOW reveals a discreet way back to the dashboard —
-                    hidden by default so it never distracts the audience. */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }} onMouseEnter={() => setShowNav(true)} onMouseLeave={() => setShowNav(false)}>
-                  <span style={{ width: 9, height: 9, borderRadius: "50%", background: DANGER, animation: "blink 1.2s infinite" }} />
-                  <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: ".14em", color: DANGER_INK, whiteSpace: "nowrap" }}>LIVE NOW</span>
-                  <Link to="/admin" style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".08em", color: MUTED2, textDecoration: "none", padding: "3px 10px", borderRadius: 999, border: "1px solid rgba(var(--ts-neutral-rgb),.16)", background: "rgba(var(--ts-neutral-rgb),.05)", opacity: showNav ? 1 : 0, transition: "opacity .2s", pointerEvents: showNav ? "auto" : "none" }}>← DASHBOARD</Link>
+                {/* Hovering LIVE NOW swaps it for a discreet dashboard link that
+                    sits right on top — hidden until the organizer goes looking. */}
+                <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 10 }} onMouseEnter={() => setShowNav(true)} onMouseLeave={() => setShowNav(false)}>
+                  <span style={{ width: 9, height: 9, borderRadius: "50%", background: DANGER, animation: "blink 1.2s infinite", opacity: showNav ? 0 : 1, transition: "opacity .18s" }} />
+                  <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: ".14em", color: DANGER_INK, whiteSpace: "nowrap", opacity: showNav ? 0 : 1, transition: "opacity .18s" }}>LIVE NOW</span>
+                  <Link to="/admin" style={{ position: "absolute", left: 0, top: "50%", transform: "translateY(-50%)", fontSize: 12, fontWeight: 800, letterSpacing: ".08em", color: INK, textDecoration: "none", padding: "5px 12px", borderRadius: 999, border: "1px solid rgba(var(--ts-neutral-rgb),.18)", background: "rgba(var(--ts-neutral-rgb),.07)", whiteSpace: "nowrap", opacity: showNav ? 1 : 0, transition: "opacity .18s", pointerEvents: showNav ? "auto" : "none" }}>← DASHBOARD</Link>
                 </div>
                 <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 42, letterSpacing: "-.03em", lineHeight: 1, marginTop: 8, whiteSpace: "nowrap" }}>{event.name}</div>
                 <div style={{ fontSize: 15, color: "#9E99AD", fontWeight: 600, marginTop: 8 }}>{live.length} stories from the room · updating live</div>
