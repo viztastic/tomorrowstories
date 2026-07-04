@@ -8,5 +8,6 @@ cdk.out/
 # Local secrets / deploy state — never commit
 .admin-key
 .transcode-mode
+.clerk-env
 # Build artifacts
 *.tsbuildinfo

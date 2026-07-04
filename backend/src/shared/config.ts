@@ -19,9 +19,17 @@ export const config = {
   mcRole: process.env.MEDIACONVERT_ROLE_ARN || "",
   mcQueue: process.env.MEDIACONVERT_QUEUE || "",
   // Shared secret guarding the /admin sessions list. Empty = admin disabled.
+  // (Legacy break-glass; organizer auth is Clerk — see clerkSecretKey.)
   adminPassword: process.env.ADMIN_PASSWORD || "",
   // TRANSCODE=off serves original uploads directly (no MediaConvert).
   transcode: (process.env.TRANSCODE || "on").toLowerCase() !== "off",
+  // Clerk organizer auth. Empty secret = auth disabled (dev/demo fallback:
+  // organizer routes fall back to the legacy shared-password guard).
+  clerkSecretKey: process.env.CLERK_SECRET_KEY || "",
+  // Clerk user ids granted super-admin (all-events) access, comma-separated.
+  superAdminIds: (process.env.SUPER_ADMIN_IDS || "").split(",").map((s) => s.trim()).filter(Boolean),
+  // Allowed origins for Clerk token `authorizedParties` (optional hardening).
+  authorizedParties: (process.env.CLERK_AUTHORIZED_PARTIES || "").split(",").map((s) => s.trim()).filter(Boolean),
 };
 
 /** The default six conference topic buckets ("themes") from the design. */

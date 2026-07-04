@@ -10,6 +10,23 @@ export interface Theme {
 
 export type VideoStatus = "processing" | "live" | "failed";
 
+export type Plan = "free" | "paid" | "unlimited";
+
+/**
+ * DynamoDB item for an organizer account. PK=ORG#<clerkUserId>, SK=PROFILE.
+ * Created lazily on the organizer's first authenticated request.
+ */
+export interface OrganizerItem {
+  PK: string;
+  SK: "PROFILE";
+  organizerId: string; // Clerk user id (the `sub` claim)
+  email?: string;
+  plan: Plan;
+  eventsCount: number; // owned events, for quota checks
+  createdAt: string;
+  stripeCustomerId?: string; // reserved for billing (unused for now)
+}
+
 /** DynamoDB item for an event. PK=EVENT#<id>, SK=META */
 export interface EventItem {
   PK: string;
@@ -19,6 +36,10 @@ export interface EventItem {
   name: string;
   themes: Theme[]; // topic buckets attendees choose from
   palette?: string; // visual palette id (color skin); undefined = default. See config.PALETTE_IDS
+  ownerId?: string; // Clerk user id of the organizer who owns it (undefined = legacy)
+  // GSI1 (owner → events) attributes; set whenever ownerId is set.
+  GSI1PK?: string; // ORG#<ownerId>
+  GSI1SK?: string; // <createdAt>#<eventId>
   createdAt: string;
   creatorIp?: string; // source IP that created the event (admin-only)
 }

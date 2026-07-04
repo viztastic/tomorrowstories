@@ -1,15 +1,19 @@
 import { test, expect } from "@playwright/test";
 
-test("admin is password-gated, then lists every session with links", async ({ page }) => {
+// In demo mode there are no Clerk keys, so the organizer is treated as signed in
+// (mock auth) and the dashboard renders directly — no password gate.
+test("dashboard lists your events with links", async ({ page }) => {
   await page.goto("/admin");
-  await expect(page.getByText(/organizer console/i)).toBeVisible();
-
-  // Demo mode accepts any password.
-  await page.getByPlaceholder(/admin password/i).fill("a-very-long-password");
-  await page.getByRole("button", { name: /unlock/i }).click();
-
-  await expect(page.getByText("Sessions")).toBeVisible();
+  await expect(page.getByText("Your events")).toBeVisible();
   await expect(page.getByText("ATTENDEE").first()).toBeVisible();
   await expect(page.getByText("BIG SCREEN").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Copy" }).first()).toBeVisible();
+});
+
+test("dashboard can open the theme & topics editor for an event", async ({ page }) => {
+  await page.goto("/admin");
+  await page.getByRole("button", { name: /edit theme & topics/i }).first().click();
+  await expect(page.getByText("WALL & APP THEME")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Rally" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /save changes/i })).toBeVisible();
 });

@@ -9,7 +9,8 @@ import {
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { config } from "./config.js";
-import type { EventItem, VideoItem } from "./types.js";
+import { DEFAULT_PLAN } from "./plans.js";
+import type { EventItem, OrganizerItem, VideoItem } from "./types.js";
 
 const doc = DynamoDBDocumentClient.from(new DynamoDBClient({ region: config.region }), {
   marshallOptions: { removeUndefinedValues: true },
@@ -17,6 +18,13 @@ const doc = DynamoDBDocumentClient.from(new DynamoDBClient({ region: config.regi
 
 const eventPK = (eventId: string) => `EVENT#${eventId}`;
 const videoSK = (videoId: string) => `VIDEO#${videoId}`;
+const orgPK = (userId: string) => `ORG#${userId}`;
+
+/** GSI1 (owner → their events, newest first). Callers stamp these on the event. */
+export const ownerGsiKeys = (ownerId: string, createdAt: string, eventId: string) => ({
+  GSI1PK: orgPK(ownerId),
+  GSI1SK: `${createdAt}#${eventId}`,
+});
 
 export async function putEvent(event: EventItem): Promise<void> {
   await doc.send(new PutCommand({ TableName: config.tableName, Item: event }));
@@ -66,7 +74,69 @@ export async function getVideo(eventId: string, videoId: string): Promise<VideoI
   return (res.Item as VideoItem) ?? null;
 }
 
-/** Every event (admin console). Scans for META items — fine at conference scale. */
+// ------------------------------------------------------------- organizers
+
+export async function getOrganizer(userId: string): Promise<OrganizerItem | null> {
+  const res = await doc.send(
+    new GetCommand({ TableName: config.tableName, Key: { PK: orgPK(userId), SK: "PROFILE" } })
+  );
+  return (res.Item as OrganizerItem) ?? null;
+}
+
+/**
+ * Get the organizer profile, creating it on first sight (default free plan).
+ * Idempotent — a concurrent create just overwrites with identical defaults.
+ */
+export async function ensureOrganizer(userId: string, email?: string): Promise<OrganizerItem> {
+  const existing = await getOrganizer(userId);
+  if (existing) return existing;
+  const item: OrganizerItem = {
+    PK: orgPK(userId),
+    SK: "PROFILE",
+    organizerId: userId,
+    email,
+    plan: DEFAULT_PLAN,
+    eventsCount: 0,
+    createdAt: new Date().toISOString(),
+  };
+  await doc.send(new PutCommand({ TableName: config.tableName, Item: item }));
+  return item;
+}
+
+/** Atomically adjust an organizer's owned-event counter (never below 0). */
+export async function bumpOrganizerEvents(userId: string, delta: number): Promise<void> {
+  await doc.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: orgPK(userId), SK: "PROFILE" },
+      UpdateExpression: "SET eventsCount = if_not_exists(eventsCount, :z) + :d",
+      ExpressionAttributeValues: { ":d": delta, ":z": 0 },
+    })
+  );
+}
+
+/** An organizer's own events, newest first, via GSI1 (no full-table scan). */
+export async function listMyEvents(ownerId: string): Promise<EventItem[]> {
+  const items: EventItem[] = [];
+  let ExclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const res = await doc.send(
+      new QueryCommand({
+        TableName: config.tableName,
+        IndexName: "GSI1",
+        KeyConditionExpression: "GSI1PK = :pk",
+        ExpressionAttributeValues: { ":pk": orgPK(ownerId) },
+        ScanIndexForward: false, // GSI1SK starts with createdAt → newest first
+        ExclusiveStartKey,
+      })
+    );
+    items.push(...((res.Items as EventItem[]) ?? []));
+    ExclusiveStartKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (ExclusiveStartKey);
+  return items;
+}
+
+/** Every event (super-admin console). Scans for META items — fine at conference scale. */
 export async function listAllEvents(): Promise<EventItem[]> {
   const items: EventItem[] = [];
   let ExclusiveStartKey: Record<string, unknown> | undefined;

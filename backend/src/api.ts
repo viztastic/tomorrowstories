@@ -12,11 +12,19 @@ import {
   putCodeMapping,
   getEventIdByCode,
   listAllEvents,
+  listMyEvents,
   deleteEvent,
   updateEvent,
+  ensureOrganizer,
+  getOrganizer,
+  bumpOrganizerEvents,
+  ownerGsiKeys,
 } from "./shared/db.js";
 import { newEventCode, newEventId, newVideoId } from "./shared/ids.js";
 import { normalizeThemes } from "./shared/themes.js";
+import { authEnabled, requireOrganizer, requireOwner, isSuperAdmin } from "./shared/auth.js";
+import type { OrganizerIdentity } from "./shared/auth.js";
+import { limitsFor } from "./shared/plans.js";
 import { eventToDTO, videoToDTO } from "./shared/dto.js";
 import { badRequest, created, HttpError, json, notFound, ok, serverError } from "./shared/http.js";
 import type { EventItem, VideoItem } from "./shared/types.js";
@@ -45,9 +53,13 @@ export async function handler(
     if (method === "POST" && event.rawPath === "/events") {
       return await createEvent(event);
     }
-    // GET /admin/events  (shared-secret organizer console)
+    // GET /admin/events  (all events — super-admin / legacy shared-secret)
     if (method === "GET" && event.rawPath === "/admin/events") {
       return await adminList(event);
+    }
+    // GET /me/events  (an organizer's own events)
+    if (method === "GET" && event.rawPath === "/me/events") {
+      return await myEventsRoute(event);
     }
     // GET /join/{code}
     if (method === "GET" && p.code) {
@@ -98,6 +110,20 @@ function parseBody(event: APIGatewayProxyEventV2): Record<string, unknown> {
 }
 
 async function createEvent(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  // Auth mode: only signed-in organizers create events (they own them).
+  // Legacy mode (no Clerk): open creation, ownerless — unchanged behavior.
+  const identity = authEnabled() ? await requireOrganizer(event) : null;
+
+  if (identity) {
+    const org = await ensureOrganizer(identity.userId, identity.email);
+    const limits = limitsFor(org.plan);
+    if (org.eventsCount >= limits.maxEvents) {
+      return json(402, {
+        error: `Your ${org.plan} plan allows ${limits.maxEvents} event${limits.maxEvents === 1 ? "" : "s"}. Upgrade to create more.`,
+      });
+    }
+  }
+
   const body = parseBody(event);
   const name = String(body.name ?? "").trim() || "Tomorrow Stories";
   const eventId = newEventId();
@@ -115,6 +141,7 @@ async function createEvent(event: APIGatewayProxyEventV2): Promise<APIGatewayPro
     code = newEventCode();
   }
 
+  const createdAt = new Date().toISOString();
   const item: EventItem = {
     PK: `EVENT#${eventId}`,
     SK: "META",
@@ -123,11 +150,13 @@ async function createEvent(event: APIGatewayProxyEventV2): Promise<APIGatewayPro
     name: name.slice(0, 80),
     themes,
     palette,
-    createdAt: new Date().toISOString(),
+    ...(identity ? { ownerId: identity.userId, ...ownerGsiKeys(identity.userId, createdAt, eventId) } : {}),
+    createdAt,
     creatorIp: event.requestContext.http.sourceIp,
   };
   await putEvent(item);
   await putCodeMapping(code, eventId);
+  if (identity) await bumpOrganizerEvents(identity.userId, 1);
   return created(eventToDTO(item));
 }
 
@@ -141,9 +170,10 @@ async function patchEventRoute(
   eventId: string,
   event: APIGatewayProxyEventV2
 ): Promise<APIGatewayProxyResultV2> {
-  requireAdmin(event);
+  const identity = await requireManager(event);
   const e = await getEvent(eventId);
   if (!e) return notFound("Event not found");
+  if (identity) requireOwner(e, identity);
 
   const body = parseBody(event);
   const patch: { name?: string; palette?: string; themes?: EventItem["themes"] } = {};
@@ -196,9 +226,30 @@ function requireAdmin(event: APIGatewayProxyEventV2): void {
   if (key !== config.adminPassword) throw new HttpError(401, "Wrong password");
 }
 
-async function adminList(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+/**
+ * Guard for event-management routes. When Clerk is configured, requires a valid
+ * organizer session and returns their identity. Otherwise (local/demo, or before
+ * Clerk is set up) falls back to the legacy shared-password guard and returns
+ * null — the caller then skips ownership checks (password = full access).
+ */
+async function requireManager(event: APIGatewayProxyEventV2): Promise<OrganizerIdentity | null> {
+  if (authEnabled()) return await requireOrganizer(event);
   requireAdmin(event);
+  return null;
+}
+
+async function adminList(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  const identity = await requireManager(event);
+  // In auth mode, the all-events list is super-admin only.
+  if (identity && !isSuperAdmin(identity.userId)) throw new HttpError(403, "Super-admin access only");
   const events = (await listAllEvents()).map((e) => eventToDTO(e, { admin: true }));
+  return ok({ events });
+}
+
+/** An organizer's own events (requires a Clerk session). */
+async function myEventsRoute(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  const identity = await requireOrganizer(event);
+  const events = (await listMyEvents(identity.userId)).map((e) => eventToDTO(e, { admin: true }));
   return ok({ events });
 }
 
@@ -206,9 +257,10 @@ async function deleteEventRoute(
   eventId: string,
   event: APIGatewayProxyEventV2
 ): Promise<APIGatewayProxyResultV2> {
-  requireAdmin(event);
+  const identity = await requireManager(event);
   const e = await getEvent(eventId);
   if (!e) return notFound("Event not found");
+  if (identity) requireOwner(e, identity);
   const videos = await listVideos(eventId);
   // Metadata first, then the files. If a file delete fails the metadata is
   // already gone, so the event disappears from the wall/admin either way.
@@ -217,6 +269,8 @@ async function deleteEventRoute(
     deletePrefix(config.mediaBucket, `media/${eventId}/`),
     deletePrefix(config.rawBucket, `raw/${eventId}/`),
   ]);
+  // Free the owner's event-quota slot.
+  if (e.ownerId) await bumpOrganizerEvents(e.ownerId, -1);
   return ok({ deleted: true, videos: videos.length });
 }
 
@@ -252,6 +306,18 @@ async function createUpload(
 ): Promise<APIGatewayProxyResultV2> {
   const e = await getEvent(eventId);
   if (!e) return notFound("Event not found");
+
+  // Plan quota (owned events only): cap clips per event by the owner's plan.
+  // Legacy/ownerless events and unlimited plans skip the extra reads.
+  if (e.ownerId) {
+    const limits = limitsFor((await getOrganizer(e.ownerId))?.plan);
+    if (Number.isFinite(limits.maxClipsPerEvent)) {
+      const count = (await listVideos(eventId)).length;
+      if (count >= limits.maxClipsPerEvent) {
+        return json(403, { error: "This event has reached its story limit." });
+      }
+    }
+  }
 
   const body = parseBody(event);
   const title = String(body.title ?? "").trim();

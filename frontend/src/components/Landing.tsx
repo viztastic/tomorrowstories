@@ -8,6 +8,7 @@ import { DEFAULT_PALETTE_ID } from "../palettes";
 import { PalettePicker } from "./organizer/PalettePicker";
 import { TopicEditor } from "./organizer/TopicEditor";
 import { Spinner } from "./common";
+import { useOrganizer } from "../auth";
 import type { Theme } from "../types";
 
 const page: React.CSSProperties = {
@@ -102,6 +103,8 @@ export type LandingMode = "full" | "join" | "create";
 
 export function Landing({ mode = "full" }: { mode?: LandingMode }) {
   const nav = useNavigate();
+  const { clerkActive, isSignedIn } = useOrganizer();
+  const needsSignIn = clerkActive && !isSignedIn;
   const [name, setName] = useState("");
   const [palette, setPalette] = useState(DEFAULT_PALETTE_ID);
   const [topics, setTopics] = useState<Theme[]>(THEMES);
@@ -135,6 +138,11 @@ export function Landing({ mode = "full" }: { mode?: LandingMode }) {
   }
 
   async function create() {
+    // In auth mode, creating requires a signed-in organizer.
+    if (needsSignIn) {
+      nav("/sign-in", { state: { from: "/create" } });
+      return;
+    }
     setCreating(true);
     setErr(null);
     try {
@@ -206,7 +214,7 @@ export function Landing({ mode = "full" }: { mode?: LandingMode }) {
 
       <button style={{ ...(createPrimary ? primaryBtn : outlineBtn), marginTop: 16 }} onClick={create} disabled={creating}>
         {creating ? <Spinner size={18} /> : null}
-        {creating ? "Creating…" : "Create event & open big screen"}
+        {needsSignIn ? "Sign in to create an event" : creating ? "Creating…" : "Create event & open big screen"}
       </button>
     </div>
   );

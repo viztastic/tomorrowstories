@@ -67,6 +67,27 @@ fi
 export TRANSCODE
 printf '%s\n' "$TRANSCODE" > .transcode-mode
 
+# Clerk organizer auth (optional, sticky). Provide keys via env or ./.clerk-env
+# (gitignored). With both keys set, organizer sign-in is enabled; without them
+# the app deploys in OPEN mode (no sign-in — anyone can create/manage events).
+# See CLERK_SETUP.md for how to get the keys and configure sign-in methods.
+if [ -f .clerk-env ]; then
+  # shellcheck disable=SC1091
+  source ./.clerk-env
+fi
+if [ -n "${CLERK_SECRET_KEY:-}" ] && [ -n "${CLERK_PUBLISHABLE_KEY:-}" ]; then
+  {
+    printf 'export CLERK_PUBLISHABLE_KEY=%q\n' "$CLERK_PUBLISHABLE_KEY"
+    printf 'export CLERK_SECRET_KEY=%q\n' "$CLERK_SECRET_KEY"
+    printf 'export SUPER_ADMIN_IDS=%q\n' "${SUPER_ADMIN_IDS:-}"
+  } > .clerk-env
+  export CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY SUPER_ADMIN_IDS
+  bold "  Organizer auth: ON (Clerk keys loaded from ./.clerk-env)."
+else
+  printf "\033[33m%s\033[0m\n" "  ⚠ Clerk keys not set — deploying in OPEN mode (no organizer sign-in)."
+  printf "\033[33m%s\033[0m\n" "    Set CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY (see CLERK_SETUP.md) and re-run to enable."
+fi
+
 # ---- install -----------------------------------------------------------------
 bold "▶ Installing dependencies (first run takes a few minutes)…"
 npm install --silent
@@ -115,10 +136,15 @@ aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*" >/d
 echo
 bold "✅ Deployed!"
 echo "   Organizer / create an event:  $SITE_URL"
-echo "   All sessions (admin):         $SITE_URL/admin"
-echo "   Admin password:               $ADMIN_KEY"
+echo "   Organizer dashboard:          $SITE_URL/admin"
+if [ -n "${CLERK_SECRET_KEY:-}" ]; then
+  echo "   Organizer auth:               ON (Clerk — sign in to create/manage)"
+else
+  echo "   Organizer auth:               OFF (open mode — legacy admin password below)"
+  echo "   Admin password:               $ADMIN_KEY"
+fi
 echo "   Transcode mode:               ${TRANSCODE}  (sticky — saved in ./.transcode-mode; set TRANSCODE=on|off to change)"
-echo "   (Password is also saved in ./.admin-key — keep it private.)"
+echo "   (Secrets saved in ./.admin-key and ./.clerk-env — keep them private.)"
 echo "   (Create an event → it opens the big screen with a live QR code.)"
 echo
 echo "   The QR on the big screen now points at the real site, so phones can scan"

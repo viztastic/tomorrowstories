@@ -22,12 +22,25 @@ export interface UploadMeta {
   contentType: string;
 }
 
+// The auth layer registers a getter that returns the current Clerk session
+// token (or null). Kept as a module-level hook so api calls don't each need it
+// threaded through. See auth.tsx.
+let tokenGetter: (() => Promise<string | null>) | null = null;
+export function setTokenGetter(fn: (() => Promise<string | null>) | null) {
+  tokenGetter = fn;
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const base = await getApiUrl();
   if (!base) throw new Error("No API configured");
+  const token = tokenGetter ? await tokenGetter() : null;
   const res = await fetch(base + path, {
     ...init,
-    headers: { "content-type": "application/json", ...(init?.headers || {}) },
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers || {}),
+    },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -47,12 +60,11 @@ export const api = {
     });
   },
 
-  /** Organizer: edit an event's name / palette / topic buckets. Guarded by the shared key. */
-  async updateEvent(eventId: string, patch: EventSettings, key: string): Promise<EventDTO> {
+  /** Organizer: edit an event's name / palette / topic buckets (Bearer session). */
+  async updateEvent(eventId: string, patch: EventSettings): Promise<EventDTO> {
     if (DEMO || !(await getApiUrl())) return demo.updateEvent(eventId, patch);
     return req<EventDTO>(`/events/${eventId}`, {
       method: "PATCH",
-      headers: { "x-admin-key": key },
       body: JSON.stringify(patch),
     });
   },
@@ -69,10 +81,10 @@ export const api = {
     return r.eventId;
   },
 
-  /** Admin: list every session. Guarded by the shared password. */
-  async adminListEvents(key: string): Promise<EventDTO[]> {
+  /** Organizer: list the events I own (Bearer session; demo returns all). */
+  async myEvents(): Promise<EventDTO[]> {
     if (DEMO || !(await getApiUrl())) return demo.listAllEvents();
-    const r = await req<{ events: EventDTO[] }>("/admin/events", { headers: { "x-admin-key": key } });
+    const r = await req<{ events: EventDTO[] }>("/me/events");
     return r.events;
   },
 
@@ -87,13 +99,13 @@ export const api = {
     return r.likes;
   },
 
-  /** Admin: delete an event and all its videos + files. Guarded by the password. */
-  async deleteEvent(eventId: string, key: string): Promise<void> {
+  /** Organizer: delete an event and all its videos + files (Bearer session). */
+  async deleteEvent(eventId: string): Promise<void> {
     if (DEMO || !(await getApiUrl())) {
       demo.deleteEvent(eventId);
       return;
     }
-    await req<{ deleted: boolean }>(`/events/${eventId}`, { method: "DELETE", headers: { "x-admin-key": key } });
+    await req<{ deleted: boolean }>(`/events/${eventId}`, { method: "DELETE" });
   },
 
   /**

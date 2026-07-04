@@ -2,83 +2,28 @@ import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { DEMO } from "../config";
 import { ACCENT, BRAND_GRAD, FONT_DISPLAY, INK, MUTED, MUTED2 } from "../design";
 import { Spinner } from "./common";
+import { OrganizerButton } from "../auth";
 import { PalettePicker } from "./organizer/PalettePicker";
 import { TopicEditor } from "./organizer/TopicEditor";
 import { buildArchive, slug } from "../export";
 import type { EventDTO, Theme } from "../types";
 
-const KEY = "ts:adminKey";
-
+/** Organizer dashboard — lists the events you own (route is sign-in gated). */
 export function Admin() {
-  const [savedKey, setSavedKey] = useState(() => sessionStorage.getItem(KEY) || "");
-  const [authed, setAuthed] = useState(false);
   const [events, setEvents] = useState<EventDTO[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  async function load(k: string) {
-    if (!k) return;
-    setLoading(true);
-    setErr(null);
-    try {
-      const evs = await api.adminListEvents(k);
-      setEvents(evs);
-      setAuthed(true);
-      sessionStorage.setItem(KEY, k);
-      setSavedKey(k);
-    } catch {
-      setErr("That password didn’t work.");
-      setAuthed(false);
-      sessionStorage.removeItem(KEY);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Auto-unlock if we already have a key from this browser session.
   useEffect(() => {
-    if (savedKey) load(savedKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let alive = true;
+    api
+      .myEvents()
+      .then((evs) => { if (alive) { setEvents(evs); setLoading(false); } })
+      .catch((e) => { if (alive) { setErr(e instanceof Error ? e.message : "Couldn’t load your events"); setLoading(false); } });
+    return () => { alive = false; };
   }, []);
-
-  function signOut() {
-    sessionStorage.removeItem(KEY);
-    setSavedKey("");
-    setAuthed(false);
-    setEvents([]);
-    setInput("");
-  }
-
-  if (!authed) {
-    return (
-      <div style={page}>
-        <Header />
-        <div style={{ ...card, maxWidth: 420 }}>
-          <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 22, letterSpacing: "-.02em" }}>Organizer console</div>
-          <div style={{ fontSize: 13.5, color: MUTED, marginTop: 8, lineHeight: 1.5 }}>Enter the admin password to see every session and its links.</div>
-          {err && <div style={errBox}>{err}</div>}
-          <input
-            type="password"
-            style={{ ...input8, marginTop: err ? 10 : 18 }}
-            placeholder="Admin password"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && load(input.trim())}
-            autoFocus
-          />
-          <button style={{ ...primaryBtn, marginTop: 12 }} onClick={() => load(input.trim())} disabled={loading}>
-            {loading ? <Spinner size={18} /> : null}
-            {loading ? "Checking…" : "Unlock"}
-          </button>
-          {DEMO && <div style={{ color: MUTED2, fontSize: 12, marginTop: 14 }}>Demo mode — any password works.</div>}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={page}>
@@ -86,31 +31,38 @@ export function Admin() {
       <div style={{ width: "100%", maxWidth: 780 }}>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>
           <div>
-            <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 26, letterSpacing: "-.02em" }}>Sessions</div>
+            <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 26, letterSpacing: "-.02em" }}>Your events</div>
             <div style={{ fontSize: 13, color: MUTED, marginTop: 4 }}>{events.length} event{events.length === 1 ? "" : "s"}</div>
           </div>
-          <button onClick={signOut} style={ghostBtn}>Lock</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Link to="/create" style={{ ...primaryBtn, width: "auto", padding: "10px 16px", textDecoration: "none" }}>New event</Link>
+            <OrganizerButton />
+          </div>
         </div>
 
-        {events.length === 0 && <div style={{ color: MUTED2, padding: "40px 0", textAlign: "center" }}>No sessions yet.</div>}
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {events.map((e) => (
-            <SessionCard
-              key={e.eventId}
-              ev={e}
-              adminKey={savedKey}
-              onDeleted={() => setEvents((prev) => prev.filter((x) => x.eventId !== e.eventId))}
-              onUpdated={(updated) => setEvents((prev) => prev.map((x) => (x.eventId === updated.eventId ? updated : x)))}
-            />
-          ))}
-        </div>
+        {err && <div style={errBox}>{err}</div>}
+        {loading ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}><Spinner size={26} /></div>
+        ) : events.length === 0 ? (
+          <div style={{ color: MUTED2, padding: "40px 0", textAlign: "center" }}>No events yet — create your first one.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {events.map((e) => (
+              <SessionCard
+                key={e.eventId}
+                ev={e}
+                onDeleted={() => setEvents((prev) => prev.filter((x) => x.eventId !== e.eventId))}
+                onUpdated={(updated) => setEvents((prev) => prev.map((x) => (x.eventId === updated.eventId ? updated : x)))}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function SessionCard({ ev, adminKey, onDeleted, onUpdated }: { ev: EventDTO; adminKey: string; onDeleted: () => void; onUpdated: (ev: EventDTO) => void }) {
+function SessionCard({ ev, onDeleted, onUpdated }: { ev: EventDTO; onDeleted: () => void; onUpdated: (ev: EventDTO) => void }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState<"" | "delete" | "download" | "save">("");
   const [dl, setDl] = useState<string | null>(null);
@@ -130,7 +82,7 @@ function SessionCard({ ev, adminKey, onDeleted, onUpdated }: { ev: EventDTO; adm
     setBusy("save");
     setErr(null);
     try {
-      const updated = await api.updateEvent(ev.eventId, { palette: draftPalette, themes: draftThemes }, adminKey);
+      const updated = await api.updateEvent(ev.eventId, { palette: draftPalette, themes: draftThemes });
       onUpdated(updated);
       setEditing(false);
     } catch (e) {
@@ -144,7 +96,7 @@ function SessionCard({ ev, adminKey, onDeleted, onUpdated }: { ev: EventDTO; adm
     setBusy("delete");
     setErr(null);
     try {
-      await api.deleteEvent(ev.eventId, adminKey);
+      await api.deleteEvent(ev.eventId);
       onDeleted();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Delete failed");
@@ -286,9 +238,7 @@ const page: CSSProperties = {
   padding: "calc(40px + env(safe-area-inset-top)) 18px calc(40px + env(safe-area-inset-bottom))",
 };
 const card: CSSProperties = { width: "100%", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.09)", borderRadius: 20, padding: 20 };
-const input8: CSSProperties = { width: "100%", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 14, padding: "14px 16px", color: INK, fontSize: 15, fontFamily: "inherit", outline: "none" };
 const primaryBtn: CSSProperties = { width: "100%", padding: 15, borderRadius: 14, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 15, color: "#fff", background: BRAND_GRAD, display: "flex", alignItems: "center", justifyContent: "center", gap: 9 };
-const ghostBtn: CSSProperties = { padding: "9px 16px", borderRadius: 999, border: "1px solid rgba(255,255,255,.16)", background: "transparent", color: INK, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" };
 const chip: CSSProperties = { flex: "none", padding: "7px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,.14)", background: "rgba(255,255,255,.05)", color: INK, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };
 const linkRow: CSSProperties = { display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 12, padding: "9px 11px" };
 const dangerGhost: CSSProperties = { flex: "none", padding: "7px 14px", borderRadius: 10, border: "1px solid rgba(255,61,87,.4)", background: "transparent", color: "#FF7A9C", fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };

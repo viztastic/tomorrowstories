@@ -40,6 +40,13 @@ export class TomorrowStoriesStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
     });
+    // GSI1: owner → their events (GSI1PK=ORG#<ownerId>, GSI1SK=<createdAt>#<id>).
+    // Backs "list my events" without a full-table scan. Backfills online.
+    table.addGlobalSecondaryIndex({
+      indexName: "GSI1",
+      partitionKey: { name: "GSI1PK", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "GSI1SK", type: dynamodb.AttributeType.STRING },
+    });
 
     // Phone originals land here via presigned POST, then get transcoded.
     const rawBucket = new s3.Bucket(this, "RawUploads", {
@@ -153,12 +160,16 @@ export class TomorrowStoriesStack extends Stack {
     const apiFn = new NodejsFunction(this, "ApiFn", {
       ...fnDefaults,
       entry: path.join(backendSrc, "api.ts"),
-      // ADMIN_PASSWORD guards /admin/events; empty string disables the console.
+      // ADMIN_PASSWORD is the legacy break-glass guard; empty disables it.
+      // CLERK_SECRET_KEY turns on organizer auth (empty = legacy password mode).
       // TRANSCODE=off makes uploads skip MediaConvert and serve originals.
       environment: {
         ...commonEnv,
         ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || "",
         TRANSCODE: process.env.TRANSCODE || "on",
+        CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY || "",
+        SUPER_ADMIN_IDS: process.env.SUPER_ADMIN_IDS || "",
+        CLERK_AUTHORIZED_PARTIES: process.env.CLERK_AUTHORIZED_PARTIES || siteBaseUrl,
       },
     });
     table.grantReadWriteData(apiFn);
@@ -223,13 +234,14 @@ export class TomorrowStoriesStack extends Stack {
       corsPreflight: {
         allowOrigins: ["*"],
         allowMethods: [apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.PATCH, apigw.CorsHttpMethod.DELETE, apigw.CorsHttpMethod.OPTIONS],
-        allowHeaders: ["content-type", "x-admin-key"],
+        allowHeaders: ["content-type", "x-admin-key", "authorization"],
       },
     });
     const integration = new HttpLambdaIntegration("ApiIntegration", apiFn);
     const routes: [apigw.HttpMethod, string][] = [
       [apigw.HttpMethod.POST, "/events"],
       [apigw.HttpMethod.GET, "/admin/events"],
+      [apigw.HttpMethod.GET, "/me/events"],
       [apigw.HttpMethod.GET, "/join/{code}"],
       [apigw.HttpMethod.GET, "/events/{eventId}"],
       [apigw.HttpMethod.DELETE, "/events/{eventId}"],
@@ -250,7 +262,14 @@ export class TomorrowStoriesStack extends Stack {
       prune: false,
       distribution,
       distributionPaths: ["/config.json"],
-      sources: [Source.jsonData("config.json", { apiUrl })],
+      // clerkPublishableKey is public (safe to embed); empty = SPA runs in
+      // open/legacy mode without organizer sign-in.
+      sources: [
+        Source.jsonData("config.json", {
+          apiUrl,
+          clerkPublishableKey: process.env.CLERK_PUBLISHABLE_KEY || "",
+        }),
+      ],
     });
 
     // ------------------------------------------------------------- outputs
