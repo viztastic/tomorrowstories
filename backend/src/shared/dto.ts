@@ -1,5 +1,5 @@
 import { config, DEFAULT_PALETTE_ID } from "./config.js";
-import type { EventItem, EventDTO, VideoItem, VideoDTO } from "./types.js";
+import type { CommentItem, CommentDTO, EventItem, EventDTO, VideoItem, VideoDTO } from "./types.js";
 
 export function eventToDTO(e: EventItem, opts: { admin?: boolean } = {}): EventDTO {
   return {
@@ -30,5 +30,15 @@ export function videoToDTO(v: VideoItem): VideoDTO {
     mediaUrl: v.mediaKey ? `${config.mediaBaseUrl}/${v.mediaKey}` : null,
     posterUrl: v.posterKey ? `${config.mediaBaseUrl}/${v.posterKey}` : null,
     createdAt: v.createdAt,
+  };
+}
+
+export function commentToDTO(c: CommentItem): CommentDTO {
+  return {
+    id: c.commentId,
+    videoId: c.videoId,
+    author: c.author,
+    text: c.text,
+    createdAt: c.createdAt,
   };
 }

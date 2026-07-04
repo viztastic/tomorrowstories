@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { CSSProperties } from "react";
-import type { LocalComment } from "../../types";
+import type { CommentDTO } from "../../types";
 import { api } from "../../api";
 import { ACCENT, BRAND_GRAD, CHIP_ON, CHIP_ON_INK, FONT_DISPLAY, HEADER_BG, INK, MUTED, MUTED2, OVERLAY_BG, PAGE_BG, themeById } from "../../design";
 import { PaletteProvider } from "../../PaletteProvider";
@@ -38,8 +38,8 @@ export function Attendee({ eventId }: { eventId: string }) {
   const [activeTheme, setActiveTheme] = useState("all");
   const [sel, setSel] = useState<string | null>(null);
   const [follows, setFollows] = useState<Record<string, boolean>>({ green: true });
-  const [comments, setComments] = useState<Record<string, LocalComment[]>>({});
-  const [cdraft, setCdraft] = useState("");
+  const [comments, setComments] = useState<Record<string, CommentDTO[]>>({});
+  const [myName, setMyName] = useState(() => localStorage.getItem(`ts:${eventId}:name`) || "");
   const [liked, setLiked] = useState<Set<string>>(() => loadSet(`ts:${eventId}:liked`));
   const [myIds, setMyIds] = useState<Set<string>>(() => loadSet(`ts:${eventId}:mine`));
 
@@ -63,11 +63,13 @@ export function Attendee({ eventId }: { eventId: string }) {
       /* keep optimistic value */
     }
   }
-  function sendComment() {
-    const t = cdraft.trim();
-    if (!t || !sel) return;
-    setComments((c) => ({ ...c, [sel]: [...(c[sel] || []), { n: "You", t, c: ACCENT }] }));
-    setCdraft("");
+  async function submitComment(videoId: string, author: string, text: string) {
+    try { localStorage.setItem(`ts:${eventId}:name`, author); } catch { /* ignore */ }
+    setMyName(author);
+    try {
+      const c = await api.addComment(eventId, videoId, { author, text });
+      setComments((m) => ({ ...m, [videoId]: [...(m[videoId] || []), c] }));
+    } catch { /* ignore — keep the composer contents on failure */ }
   }
 
   const showTabs = screen === "gallery" || screen === "themes" || screen === "you";
@@ -95,7 +97,11 @@ export function Attendee({ eventId }: { eventId: string }) {
     );
   }
 
-  const openVideo = (id: string) => { setSel(id); setScreen("video"); };
+  const openVideo = (id: string) => {
+    setSel(id);
+    setScreen("video");
+    api.listComments(eventId, id).then((cs) => setComments((m) => ({ ...m, [id]: cs }))).catch(() => {});
+  };
 
   return (
     <PaletteProvider paletteId={data.event.palette}>
@@ -167,9 +173,8 @@ export function Attendee({ eventId }: { eventId: string }) {
             following={!!follows[current.theme]}
             onToggleFollow={() => toggleFollow(current.theme)}
             comments={comments[current.id] || []}
-            commentDraft={cdraft}
-            onCommentChange={setCdraft}
-            onSendComment={sendComment}
+            onSubmitComment={(author, text) => submitComment(current.id, author, text)}
+            defaultName={myName}
             onBack={() => { setScreen("gallery"); setSel(null); }}
           />
         </Overlay>

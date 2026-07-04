@@ -62,6 +62,18 @@ export interface VideoItem {
   createdAt: string;
 }
 
+/** DynamoDB item for a comment. PK=EVENT#<id>, SK=CMT#<videoId>#<createdAt>#<commentId> */
+export interface CommentItem {
+  PK: string;
+  SK: string;
+  eventId: string;
+  videoId: string;
+  commentId: string;
+  author: string; // required display name
+  text: string;
+  createdAt: string;
+}
+
 // ---- Wire shapes (what the API returns to the browser) ----
 
 export interface EventDTO {
@@ -86,5 +98,13 @@ export interface VideoDTO {
   likes: number;
   mediaUrl: string | null;
   posterUrl: string | null;
+  createdAt: string;
+}
+
+export interface CommentDTO {
+  id: string;
+  videoId: string;
+  author: string;
+  text: string;
   createdAt: string;
 }

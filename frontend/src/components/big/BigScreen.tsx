@@ -184,6 +184,7 @@ function Projector({
   // view stays open on the facilitator's intent even if a poll transiently drops
   // the clip from the list.
   const [focused, setFocused] = useState<VideoDTO | null>(null);
+  const [showNav, setShowNav] = useState(false);
   const themes = event.themes.length ? event.themes : [{ id: "", name: "", color: "#4D7CFF" }];
 
   // Wall slot assignment. Each clip is repeated across up to 3 slots so a few
@@ -277,9 +278,12 @@ function Projector({
           <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "34px 30px 30px", minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {/* Hovering LIVE NOW reveals a discreet way back to the dashboard —
+                    hidden by default so it never distracts the audience. */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }} onMouseEnter={() => setShowNav(true)} onMouseLeave={() => setShowNav(false)}>
                   <span style={{ width: 9, height: 9, borderRadius: "50%", background: DANGER, animation: "blink 1.2s infinite" }} />
                   <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: ".14em", color: DANGER_INK, whiteSpace: "nowrap" }}>LIVE NOW</span>
+                  <Link to="/admin" style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".08em", color: MUTED2, textDecoration: "none", padding: "3px 10px", borderRadius: 999, border: "1px solid rgba(var(--ts-neutral-rgb),.16)", background: "rgba(var(--ts-neutral-rgb),.05)", opacity: showNav ? 1 : 0, transition: "opacity .2s", pointerEvents: showNav ? "auto" : "none" }}>← DASHBOARD</Link>
                 </div>
                 <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 42, letterSpacing: "-.03em", lineHeight: 1, marginTop: 8, whiteSpace: "nowrap" }}>{event.name}</div>
                 <div style={{ fontSize: 15, color: "#9E99AD", fontWeight: 600, marginTop: 8 }}>{live.length} stories from the room · updating live</div>
@@ -363,6 +367,7 @@ function Projector({
 function FacilitatorTable({ live, themes, onOpen }: { live: VideoDTO[]; themes: Theme[]; onOpen: (v: VideoDTO) => void }) {
   return (
     <div style={{ width: "100%", maxWidth: 1340, margin: "0 auto", padding: "34px 26px 72px" }}>
+      <Link to="/admin" style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: MUTED, textDecoration: "none", padding: "8px 14px", borderRadius: 999, border: "1px solid rgba(var(--ts-neutral-rgb),.14)", background: "rgba(var(--ts-neutral-rgb),.04)", marginBottom: 18 }}>← Back to dashboard</Link>
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 16 }}>
         <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 24, letterSpacing: "-.02em" }}>All stories</span>
         <span style={{ fontSize: 14, color: MUTED, fontWeight: 600 }}>{live.length} · newest first</span>

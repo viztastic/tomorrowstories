@@ -249,6 +249,9 @@ export class TomorrowStoriesStack extends Stack {
       [apigw.HttpMethod.POST, "/events/{eventId}/uploads"],
       [apigw.HttpMethod.GET, "/events/{eventId}/videos"],
       [apigw.HttpMethod.POST, "/events/{eventId}/videos/{videoId}/like"],
+      [apigw.HttpMethod.POST, "/events/{eventId}/videos/{videoId}/comments"],
+      [apigw.HttpMethod.GET, "/events/{eventId}/videos/{videoId}/comments"],
+      [apigw.HttpMethod.GET, "/events/{eventId}/comments"],
     ];
     for (const [methodEnum, routePath] of routes) {
       httpApi.addRoutes({ path: routePath, methods: [methodEnum], integration });

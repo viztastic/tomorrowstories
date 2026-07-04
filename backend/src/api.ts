@@ -19,15 +19,18 @@ import {
   getOrganizer,
   bumpOrganizerEvents,
   ownerGsiKeys,
+  putComment,
+  listVideoComments,
+  listEventComments,
 } from "./shared/db.js";
-import { newEventCode, newEventId, newVideoId } from "./shared/ids.js";
+import { newEventCode, newEventId, newVideoId, newCommentId } from "./shared/ids.js";
 import { normalizeThemes } from "./shared/themes.js";
 import { authEnabled, requireOrganizer, requireOwner, isSuperAdmin } from "./shared/auth.js";
 import type { OrganizerIdentity } from "./shared/auth.js";
 import { limitsFor } from "./shared/plans.js";
-import { eventToDTO, videoToDTO } from "./shared/dto.js";
+import { eventToDTO, videoToDTO, commentToDTO } from "./shared/dto.js";
 import { badRequest, created, HttpError, json, notFound, ok, serverError } from "./shared/http.js";
-import type { EventItem, VideoItem } from "./shared/types.js";
+import type { CommentItem, EventItem, VideoItem } from "./shared/types.js";
 
 const s3 = new S3Client({ region: config.region });
 
@@ -89,6 +92,15 @@ export async function handler(
       // POST /events/{eventId}/videos/{videoId}/like
       if (method === "POST" && p.videoId && event.rawPath.endsWith("/like")) {
         return await likeRoute(p.eventId, p.videoId);
+      }
+      // .../videos/{videoId}/comments  (public: add / list a video's comments)
+      if (p.videoId && event.rawPath.endsWith("/comments")) {
+        if (method === "POST") return await createComment(p.eventId, p.videoId, event);
+        if (method === "GET") return await listVideoCommentsRoute(p.eventId, p.videoId);
+      }
+      // GET /events/{eventId}/comments  (all comments — powers the archive)
+      if (method === "GET" && !p.videoId && event.rawPath.endsWith(`/events/${p.eventId}/comments`)) {
+        return await listEventCommentsRoute(p.eventId);
       }
     }
     return notFound("Unknown route");
@@ -262,9 +274,10 @@ async function deleteEventRoute(
   if (!e) return notFound("Event not found");
   if (identity) requireOwner(e, identity);
   const videos = await listVideos(eventId);
+  const comments = await listEventComments(eventId);
   // Metadata first, then the files. If a file delete fails the metadata is
   // already gone, so the event disappears from the wall/admin either way.
-  await deleteEvent(eventId, e.code, videos.map((v) => v.videoId));
+  await deleteEvent(eventId, e.code, videos.map((v) => v.videoId), comments.map((c) => c.SK));
   await Promise.all([
     deletePrefix(config.mediaBucket, `media/${eventId}/`),
     deletePrefix(config.rawBucket, `raw/${eventId}/`),
@@ -384,4 +397,45 @@ async function likeRoute(eventId: string, videoId: string): Promise<APIGatewayPr
   if (!v) return notFound("Video not found");
   const likes = await incrementLikes(eventId, videoId);
   return ok({ likes });
+}
+
+/** Public: an attendee posts a comment on a video. Name is required. */
+async function createComment(
+  eventId: string,
+  videoId: string,
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
+  const v = await getVideo(eventId, videoId);
+  if (!v) return notFound("Video not found");
+
+  const body = parseBody(event);
+  const author = String(body.author ?? "").trim();
+  const text = String(body.text ?? "").trim();
+  if (!author) return badRequest("A name is required to comment");
+  if (!text) return badRequest("Comment can’t be empty");
+
+  const createdAt = new Date().toISOString();
+  const commentId = newCommentId();
+  const item: CommentItem = {
+    PK: `EVENT#${eventId}`,
+    SK: `CMT#${videoId}#${createdAt}#${commentId}`,
+    eventId,
+    videoId,
+    commentId,
+    author: author.slice(0, 60),
+    text: text.slice(0, 500),
+    createdAt,
+  };
+  await putComment(item);
+  return created(commentToDTO(item));
+}
+
+async function listVideoCommentsRoute(eventId: string, videoId: string): Promise<APIGatewayProxyResultV2> {
+  const comments = (await listVideoComments(eventId, videoId)).map(commentToDTO);
+  return ok({ comments });
+}
+
+async function listEventCommentsRoute(eventId: string): Promise<APIGatewayProxyResultV2> {
+  const comments = (await listEventComments(eventId)).map(commentToDTO);
+  return ok({ comments });
 }

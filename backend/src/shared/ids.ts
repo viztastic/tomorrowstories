@@ -28,6 +28,11 @@ export function newVideoId(): string {
   return base32(randomBytes(10)).toLowerCase();
 }
 
+/** Per-comment id. */
+export function newCommentId(): string {
+  return base32(randomBytes(8)).toLowerCase();
+}
+
 /**
  * URL/id-friendly slug for a topic-bucket name (mirrors the frontend `slug` in
  * export.ts). Lowercase, non-alphanumerics collapsed to dashes, trimmed, capped.

@@ -283,6 +283,50 @@ describe("DELETE /events/{id}", () => {
   });
 });
 
+describe("comments", () => {
+  const VIDEO = { eventId: "abc", videoId: "v1", title: "A", theme: "human", author: "M", status: "live", durationSec: 5, likes: 0, rawKey: "r", createdAt: "2026-07-01T00:00:00Z" };
+
+  it("adds a comment when name + text are present", async () => {
+    ddb.on(GetCommand).resolves({ Item: VIDEO });
+    ddb.on(PutCommand).resolves({});
+    const { status, body } = parse(
+      await handler(ev("POST", "/events/abc/videos/v1/comments", { path: { eventId: "abc", videoId: "v1" }, body: { author: "Sam", text: "Loved this" } }))
+    );
+    expect(status).toBe(201);
+    expect(body.author).toBe("Sam");
+    expect(body.text).toBe("Loved this");
+    expect(body.videoId).toBe("v1");
+  });
+
+  it("rejects a comment with no name (name is required)", async () => {
+    ddb.on(GetCommand).resolves({ Item: VIDEO });
+    const { status } = parse(
+      await handler(ev("POST", "/events/abc/videos/v1/comments", { path: { eventId: "abc", videoId: "v1" }, body: { text: "hi" } }))
+    );
+    expect(status).toBe(400);
+  });
+
+  it("rejects an empty comment", async () => {
+    ddb.on(GetCommand).resolves({ Item: VIDEO });
+    const { status } = parse(
+      await handler(ev("POST", "/events/abc/videos/v1/comments", { path: { eventId: "abc", videoId: "v1" }, body: { author: "Sam", text: "  " } }))
+    );
+    expect(status).toBe(400);
+  });
+
+  it("lists a video's comments", async () => {
+    ddb.on(QueryCommand).resolves({
+      Items: [{ eventId: "abc", videoId: "v1", commentId: "c1", author: "Sam", text: "Nice", createdAt: "2026-07-01T00:00:01Z" }],
+    });
+    const { status, body } = parse(
+      await handler(ev("GET", "/events/abc/videos/v1/comments", { path: { eventId: "abc", videoId: "v1" } }))
+    );
+    expect(status).toBe(200);
+    expect(body.comments).toHaveLength(1);
+    expect(body.comments[0].author).toBe("Sam");
+  });
+});
+
 describe("routing", () => {
   it("CORS preflight returns 204", async () => {
     const res: any = await handler(ev("OPTIONS", "/events"));

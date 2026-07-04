@@ -1,13 +1,14 @@
 // In-memory "backend" for demo mode (VITE_DEMO=1 or no /config.json). Lets the
 // whole app run with no AWS — mirrors the seeded feel of the original prototype.
 
-import type { EventDTO, Theme, VideoDTO } from "./types";
+import type { CommentDTO, EventDTO, Theme, VideoDTO } from "./types";
 import { THEMES } from "./design";
 import { DEFAULT_PALETTE_ID } from "./palettes";
 
 interface DemoEvent {
   event: EventDTO;
   videos: VideoDTO[];
+  comments: CommentDTO[];
 }
 
 const store = new Map<string, DemoEvent>();
@@ -52,7 +53,7 @@ function makeEvent(eventId: string, name: string, opts: { palette?: string; them
     bigScreenUrl: `${location.origin}/e/${eventId}/big`,
     createdAt: new Date().toISOString(),
   };
-  return { event, videos: seedVideos() };
+  return { event, videos: seedVideos(), comments: [] };
 }
 
 function ensure(eventId: string): DemoEvent {
@@ -116,6 +117,18 @@ export const demo = {
     const v = e.videos.find((x) => x.id === videoId);
     if (v) v.likes += 1;
     return v?.likes ?? 0;
+  },
+  listComments(eventId: string, videoId: string): CommentDTO[] {
+    return ensure(eventId).comments.filter((c) => c.videoId === videoId);
+  },
+  addComment(eventId: string, videoId: string, c: { author: string; text: string }): CommentDTO {
+    const e = ensure(eventId);
+    const comment: CommentDTO = { id: rid(8), videoId, author: c.author, text: c.text, createdAt: new Date().toISOString() };
+    e.comments = [...e.comments, comment];
+    return comment;
+  },
+  listEventComments(eventId: string): CommentDTO[] {
+    return ensure(eventId).comments;
   },
   deleteEvent(eventId: string): void {
     store.delete(eventId);

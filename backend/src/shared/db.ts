@@ -10,7 +10,7 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { config } from "./config.js";
 import { DEFAULT_PLAN } from "./plans.js";
-import type { EventItem, OrganizerItem, VideoItem } from "./types.js";
+import type { CommentItem, EventItem, OrganizerItem, VideoItem } from "./types.js";
 
 const doc = DynamoDBDocumentClient.from(new DynamoDBClient({ region: config.region }), {
   marshallOptions: { removeUndefinedValues: true },
@@ -216,9 +216,15 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * never leaving orphaned videos under a vanished event. Batched in chunks of 25
  * (BatchWrite's limit) with exponential backoff on UnprocessedItems.
  */
-export async function deleteEvent(eventId: string, code: string, videoIds: string[]): Promise<void> {
+export async function deleteEvent(
+  eventId: string,
+  code: string,
+  videoIds: string[],
+  commentSKs: string[] = []
+): Promise<void> {
   const keys: Record<string, string>[] = [
     ...videoIds.map((id) => ({ PK: eventPK(eventId), SK: videoSK(id) })),
+    ...commentSKs.map((sk) => ({ PK: eventPK(eventId), SK: sk })),
     { PK: eventPK(eventId), SK: "META" },
     { PK: codePK(code), SK: "CODE" },
   ];
@@ -285,4 +291,41 @@ export async function incrementLikes(eventId: string, videoId: string): Promise<
     })
   );
   return (res.Attributes?.likes as number) ?? 0;
+}
+
+// ---------------------------------------------------------------- comments
+// Comments live in the event partition under SK = CMT#<videoId>#<createdAt>#<id>,
+// so a single-partition query returns them oldest-first (natural reading order).
+
+export async function putComment(c: CommentItem): Promise<void> {
+  await doc.send(new PutCommand({ TableName: config.tableName, Item: c }));
+}
+
+/** Query helper shared by the per-video and whole-event comment reads. */
+async function queryComments(eventId: string, skPrefix: string): Promise<CommentItem[]> {
+  const items: CommentItem[] = [];
+  let ExclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const res = await doc.send(
+      new QueryCommand({
+        TableName: config.tableName,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: { ":pk": eventPK(eventId), ":sk": skPrefix },
+        ExclusiveStartKey,
+      })
+    );
+    items.push(...((res.Items as CommentItem[]) ?? []));
+    ExclusiveStartKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (ExclusiveStartKey);
+  return items; // SK sort → oldest first
+}
+
+/** Comments on one video, oldest first. */
+export function listVideoComments(eventId: string, videoId: string): Promise<CommentItem[]> {
+  return queryComments(eventId, `CMT#${videoId}#`);
+}
+
+/** Every comment in an event (for the archive export). */
+export function listEventComments(eventId: string): Promise<CommentItem[]> {
+  return queryComments(eventId, "CMT#");
 }

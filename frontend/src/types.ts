@@ -33,9 +33,10 @@ export interface VideoDTO {
   createdAt: string;
 }
 
-/** A comment kept client-side only in v1 (not persisted server-side). */
-export interface LocalComment {
-  n: string;
-  t: string;
-  c: string;
+export interface CommentDTO {
+  id: string;
+  videoId: string;
+  author: string;
+  text: string;
+  createdAt: string;
 }

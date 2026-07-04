@@ -8,7 +8,7 @@ import { DEFAULT_PALETTE_ID } from "../palettes";
 import { PalettePicker } from "./organizer/PalettePicker";
 import { TopicEditor } from "./organizer/TopicEditor";
 import { Spinner } from "./common";
-import { useOrganizer } from "../auth";
+import { useOrganizer, OrganizerButton } from "../auth";
 import type { Theme } from "../types";
 
 const page: React.CSSProperties = {
@@ -236,6 +236,13 @@ export function Landing({ mode = "full" }: { mode?: LandingMode }) {
     // live across the page; on join-only it renders the default look.
     <PaletteProvider paletteId={showCreate ? palette : undefined}>
     <div style={page}>
+      {/* Signed-in organizers get a visible account menu + dashboard shortcut. */}
+      {clerkActive && isSignedIn && (
+        <div style={{ position: "fixed", top: 16, right: 18, zIndex: 20, display: "flex", alignItems: "center", gap: 14 }}>
+          <Link to="/admin" style={{ color: MUTED, fontSize: 13, fontWeight: 700, textDecoration: "none" }}>Dashboard</Link>
+          <OrganizerButton />
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ width: 40, height: 40, borderRadius: 13, background: BRAND_GRAD, boxShadow: `0 6px 20px -6px ${ACCENT}` }} />
         <div style={{ display: "flex", flexDirection: "column", lineHeight: 1 }}>

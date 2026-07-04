@@ -1,5 +1,6 @@
+import { useState } from "react";
 import type { CSSProperties } from "react";
-import type { LocalComment, Theme, VideoDTO } from "../../types";
+import type { CommentDTO, Theme, VideoDTO } from "../../types";
 import { BRAND_GRAD, DANGER_INK, fmtDur, fmtLikes, initials, INK, MUTED, ON_ACCENT, OVERLAY_BG, pairFor, stillBg } from "../../design";
 import { Grain, PlayBadge } from "../common";
 
@@ -17,6 +18,14 @@ const avatarBig = (pair: [string, string]): CSSProperties => ({
   color: "#fff",
 });
 
+// Deterministic avatar colour for a commenter's name.
+const CMT_COLORS = ["#7B2FF7", "#EC4899", "#F59E0B", "#22D3EE", "#2FD37E", "#4D7CFF"];
+function cmtColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return CMT_COLORS[h % CMT_COLORS.length];
+}
+
 export function VideoView({
   video,
   theme,
@@ -25,9 +34,8 @@ export function VideoView({
   following,
   onToggleFollow,
   comments,
-  commentDraft,
-  onCommentChange,
-  onSendComment,
+  onSubmitComment,
+  defaultName,
   onBack,
 }: {
   video: VideoDTO;
@@ -36,13 +44,20 @@ export function VideoView({
   onLike: () => void;
   following: boolean;
   onToggleFollow: () => void;
-  comments: LocalComment[];
-  commentDraft: string;
-  onCommentChange: (v: string) => void;
-  onSendComment: () => void;
+  comments: CommentDTO[];
+  onSubmitComment: (author: string, text: string) => void;
+  defaultName?: string;
   onBack: () => void;
 }) {
   const pair = pairFor(theme, video.id);
+  const [name, setName] = useState(defaultName || "");
+  const [text, setText] = useState("");
+  const canSend = name.trim().length > 0 && text.trim().length > 0;
+  function send() {
+    if (!canSend) return;
+    onSubmitComment(name.trim(), text.trim());
+    setText("");
+  }
   return (
     <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", background: OVERLAY_BG }}>
       <div style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px" }}>
@@ -127,29 +142,38 @@ export function VideoView({
           </div>
         </div>
 
-        <div style={{ fontSize: 13, fontWeight: 700, color: MUTED, margin: "20px 0 10px" }}>{comments.length} comments</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: MUTED, margin: "20px 0 10px" }}>{comments.length} comment{comments.length === 1 ? "" : "s"}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {comments.map((c, i) => (
-            <div key={i} style={{ display: "flex", gap: 10 }}>
-              <span style={{ background: c.c, width: 30, height: 30, borderRadius: "50%", flex: "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#fff" }}>{initials(c.n)}</span>
+          {comments.length === 0 && <div style={{ fontSize: 13, color: MUTED }}>Be the first to comment.</div>}
+          {comments.map((c) => (
+            <div key={c.id} style={{ display: "flex", gap: 10 }}>
+              <span style={{ background: cmtColor(c.author), width: 30, height: 30, borderRadius: "50%", flex: "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#fff" }}>{initials(c.author)}</span>
               <div>
-                <div style={{ fontSize: 12.5, fontWeight: 700 }}>{c.n}</div>
-                <div style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.35, marginTop: 2 }}>{c.t}</div>
+                <div style={{ fontSize: 12.5, fontWeight: 700 }}>{c.author}</div>
+                <div style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.35, marginTop: 2 }}>{c.text}</div>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 9, padding: "10px 14px calc(10px + env(safe-area-inset-bottom))", borderTop: "1px solid rgba(var(--ts-neutral-rgb),.07)", background: OVERLAY_BG }}>
+      <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 8, padding: "10px 14px calc(10px + env(safe-area-inset-bottom))", borderTop: "1px solid rgba(var(--ts-neutral-rgb),.07)", background: OVERLAY_BG }}>
         <input
-          value={commentDraft}
-          onChange={(e) => onCommentChange(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && onSendComment()}
-          placeholder="Add a comment..."
-          style={{ flex: 1, background: "rgba(var(--ts-neutral-rgb),.06)", border: "1px solid rgba(var(--ts-neutral-rgb),.09)", borderRadius: 999, padding: "11px 16px", color: INK, fontSize: 14, fontFamily: "inherit", outline: "none" }}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name"
+          aria-label="Your name"
+          maxLength={60}
+          style={{ width: 92, flex: "none", background: "rgba(var(--ts-neutral-rgb),.06)", border: "1px solid rgba(var(--ts-neutral-rgb),.09)", borderRadius: 999, padding: "11px 14px", color: INK, fontSize: 13.5, fontFamily: "inherit", outline: "none" }}
         />
-        <button onClick={onSendComment} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: BRAND_GRAD, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flex: "none" }}>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && send()}
+          placeholder="Add a comment..."
+          style={{ flex: 1, minWidth: 0, background: "rgba(var(--ts-neutral-rgb),.06)", border: "1px solid rgba(var(--ts-neutral-rgb),.09)", borderRadius: 999, padding: "11px 16px", color: INK, fontSize: 14, fontFamily: "inherit", outline: "none" }}
+        />
+        <button onClick={send} disabled={!canSend} aria-label="Post comment" style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: BRAND_GRAD, display: "flex", alignItems: "center", justifyContent: "center", cursor: canSend ? "pointer" : "not-allowed", opacity: canSend ? 1 : 0.5, flex: "none" }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M4 12L20 4L14 20L11 13L4 12Z" fill="#fff" />
           </svg>

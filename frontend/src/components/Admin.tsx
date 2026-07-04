@@ -125,7 +125,8 @@ function SessionCard({ ev, onDeleted, onUpdated }: { ev: EventDTO; onDeleted: ()
         setDl(null);
         return;
       }
-      const blob = await buildArchive(event, videos, (done, total) => setDl(`Downloading ${done}/${total}…`));
+      const comments = await api.listEventComments(ev.eventId).catch(() => []);
+      const blob = await buildArchive(event, videos, comments, (done, total) => setDl(`Downloading ${done}/${total}…`));
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

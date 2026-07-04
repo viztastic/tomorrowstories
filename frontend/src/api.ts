@@ -1,6 +1,6 @@
 import { DEMO, getApiUrl } from "./config";
 import { demo } from "./demo";
-import type { EventDTO, Theme, VideoDTO } from "./types";
+import type { CommentDTO, EventDTO, Theme, VideoDTO } from "./types";
 
 /** Organizer-editable event settings (create options + PATCH body). */
 export interface EventSettings {
@@ -97,6 +97,26 @@ export const api = {
     if (DEMO || !(await getApiUrl())) return demo.like(eventId, videoId);
     const r = await req<{ likes: number }>(`/events/${eventId}/videos/${videoId}/like`, { method: "POST" });
     return r.likes;
+  },
+
+  /** Comments on one video, oldest first. */
+  async listComments(eventId: string, videoId: string): Promise<CommentDTO[]> {
+    if (DEMO || !(await getApiUrl())) return demo.listComments(eventId, videoId);
+    const r = await req<{ comments: CommentDTO[] }>(`/events/${eventId}/videos/${videoId}/comments`);
+    return r.comments;
+  },
+
+  /** Post a comment (name required). */
+  async addComment(eventId: string, videoId: string, c: { author: string; text: string }): Promise<CommentDTO> {
+    if (DEMO || !(await getApiUrl())) return demo.addComment(eventId, videoId, c);
+    return req<CommentDTO>(`/events/${eventId}/videos/${videoId}/comments`, { method: "POST", body: JSON.stringify(c) });
+  },
+
+  /** Every comment in an event — used by the archive export. */
+  async listEventComments(eventId: string): Promise<CommentDTO[]> {
+    if (DEMO || !(await getApiUrl())) return demo.listEventComments(eventId);
+    const r = await req<{ comments: CommentDTO[] }>(`/events/${eventId}/comments`);
+    return r.comments;
   },
 
   /** Organizer: delete an event and all its videos + files (Bearer session). */

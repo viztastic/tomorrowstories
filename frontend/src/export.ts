@@ -4,7 +4,7 @@
 // of tools/export-wall.mjs. Handy for post-event handoff from the admin console.
 
 import JSZip from "jszip";
-import type { EventDTO, VideoDTO } from "./types";
+import type { CommentDTO, EventDTO, VideoDTO } from "./types";
 
 export const slug = (s: string): string =>
   (s || "clip")
@@ -36,12 +36,20 @@ interface ExportItem extends VideoDTO {
 }
 
 /** The offline wall page (self-contained; references ./videos and ./posters). */
-export function renderWall(event: EventDTO, items: ExportItem[]): string {
+export function renderWall(event: EventDTO, items: ExportItem[], comments: CommentDTO[] = []): string {
   const themes = new Map((event.themes || []).map((t) => [t.id, t]));
+  const byVideo = new Map<string, CommentDTO[]>();
+  for (const c of comments) byVideo.set(c.videoId, [...(byVideo.get(c.videoId) || []), c]);
   const cards = items
     .map((v) => {
       const t = themes.get(v.theme) || { name: "", color: "#8B8698" };
       const poster = v.posterFile ? ` poster="${esc(v.posterFile)}"` : "";
+      const cmts = byVideo.get(v.id) || [];
+      const cmtHtml = cmts.length
+        ? `<div class="cmts">${cmts
+            .map((c) => `<div class="cmt"><b>${esc(c.author)}</b> ${esc(c.text)}</div>`)
+            .join("")}</div>`
+        : "";
       return `
       <figure class="card">
         <video class="vid" controls preload="none"${poster}>
@@ -51,6 +59,7 @@ export function renderWall(event: EventDTO, items: ExportItem[]): string {
           <span class="pill" style="background:${esc(t.color)}">${esc(t.name)}</span>
           <h3>${esc(v.title)}</h3>
           <p>${esc(v.author)}</p>
+          ${cmtHtml}
         </figcaption>
       </figure>`;
     })
@@ -79,6 +88,9 @@ export function renderWall(event: EventDTO, items: ExportItem[]): string {
   .pill { display:inline-block; color:#0C0A12; font-weight:800; font-size:11px; padding:4px 10px; border-radius:999px; }
   figcaption h3 { font-weight:700; font-size:15px; line-height:1.25; margin-top:9px; }
   figcaption p { color:var(--muted); font-weight:600; font-size:12.5px; margin-top:4px; }
+  .cmts { margin-top:11px; border-top:1px solid rgba(255,255,255,.08); padding-top:9px; display:flex; flex-direction:column; gap:6px; }
+  .cmt { font-size:12px; line-height:1.4; color:var(--muted); }
+  .cmt b { color:var(--ink); font-weight:700; }
   footer { max-width:1100px; margin:40px auto 0; color:var(--muted); font-size:12px; text-align:center; }
 </style>
 </head>
@@ -104,6 +116,7 @@ export function renderWall(event: EventDTO, items: ExportItem[]): string {
 export async function buildArchive(
   event: EventDTO,
   videos: VideoDTO[],
+  comments: CommentDTO[] = [],
   onProgress?: (done: number, total: number) => void
 ): Promise<Blob> {
   const live = videos.filter((v) => v.status === "live" && v.mediaUrl);
@@ -141,13 +154,15 @@ export async function buildArchive(
     onProgress?.(i + 1, live.length);
   }
   if (items.length === 0) throw new Error("None of the videos could be downloaded.");
-  zip.file("index.html", renderWall(event, items));
+  zip.file("index.html", renderWall(event, items, comments));
+  // Structured comments export (name, text, video, timestamp) for reuse.
+  zip.file("comments.json", JSON.stringify(comments, null, 2));
   zip.file(
     "README.txt",
     `${event.name} — Tomorrow Stories export\n\n` +
-      `Open index.html in any browser to view the wall offline.\n` +
-      `Raw video files are in the videos/ folder.\n` +
-      `${items.length} video(s) exported.\n` +
+      `Open index.html in any browser to view the wall offline (comments included under each clip).\n` +
+      `Raw video files are in the videos/ folder; all comments are in comments.json.\n` +
+      `${items.length} video(s) and ${comments.length} comment(s) exported.\n` +
       (skipped.length ? `${skipped.length} clip(s) could not be downloaded and were skipped.\n` : "")
   );
   return zip.generateAsync({ type: "blob" });
