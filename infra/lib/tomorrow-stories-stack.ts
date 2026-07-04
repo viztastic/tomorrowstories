@@ -110,9 +110,14 @@ export class TomorrowStoriesStack extends Stack {
         },
       },
       // SPA fallback: client-side routes (/e/<id>) resolve to index.html.
+      // errorResponses are distribution-wide, so this fallback also answers for
+      // a /media/* object whose upload hasn't finished yet (no-transcode marks
+      // clips live before the S3 POST lands). Keep the error TTL tiny, or the
+      // edge keeps serving the cached miss for a minute AFTER the upload
+      // completes and the big screen's "appears in seconds" promise breaks.
       errorResponses: [
-        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: "/index.html", ttl: Duration.minutes(1) },
-        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: "/index.html", ttl: Duration.minutes(1) },
+        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: "/index.html", ttl: Duration.seconds(5) },
+        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: "/index.html", ttl: Duration.seconds(5) },
       ],
     });
 

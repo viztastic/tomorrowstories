@@ -38,14 +38,16 @@ export function Thumb({ video, theme, autoPlay = false }: { video: VideoDTO; the
     pending.current = false;
     const clear = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } };
     // `error` (a 404 while still uploading) and the play() rejection can both fire
-    // for one failed load; `pending` collapses them into a single retry so the
-    // 40-attempt (~a few minutes) budget isn't burned twice per cycle.
+    // for one failed load; `pending` collapses them into a single retry cycle.
+    // After the fast budget (~40 attempts / a few minutes) it drops to a slow
+    // 30s ping instead of giving up: a big clip on venue wifi can outlast the
+    // fast window, and the wall never remounts a slotted card to re-arm it.
     const schedule = () => {
-      if (cancelled || pending.current || attempts.current >= 40) return;
+      if (cancelled || pending.current) return;
       pending.current = true;
       attempts.current += 1;
       clear();
-      const delay = Math.min(1200 + attempts.current * 600, 6000);
+      const delay = attempts.current > 40 ? 30_000 : Math.min(1200 + attempts.current * 600, 6000);
       timer.current = setTimeout(() => {
         pending.current = false;
         if (cancelled || !ref.current) return;

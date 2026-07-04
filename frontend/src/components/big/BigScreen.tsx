@@ -9,14 +9,36 @@ import { useEventData } from "../../useEventData";
 import { useMediaQuery } from "../../useMediaQuery";
 
 const COLS = 6;
-const WALL_ROWS = 3; // a static 6×3 grid fills the 16:9 stage — no scrolling
-const REAL_CELLS = COLS * 2; // real clips live in the top 2 rows (always fully visible)
-// Cap how many clips decode video at once so a big wall doesn't melt the projector.
+const ROWS = 4; // cells per column strip; the strip is 200% of the stage, so ~2 are on screen
+const SLOTS = COLS * ROWS;
+// Slot indices below MID live in the two MIDDLE rows of their column, which stay
+// on screen for nearly the whole drift cycle; indices >= MID are the edge rows
+// that crop in and out at the top/bottom. Clips fill middles first, so a clip on
+// the wall is effectively always visible — the old marquee's "clip disappears
+// for a minute" bug can't happen.
+const MID = SLOTS / 2;
+// Cap how many clips decode video at once so a big wall doesn't melt the
+// projector. Every wall video is a SINGLE <video> (the drift animation reverses
+// instead of wrapping, so no cloned copy exists to desync or sit blank), and
+// every one of them actually plays.
 const MAX_AUTOPLAY = 12;
+// Per-column drift durations — offbeat lengths so the columns move out of phase.
+const DURS = [46, 58, 50, 62, 48, 56];
+// A clip missing from one poll isn't freed immediately: eventually-consistent
+// reads can transiently drop a fresh clip, and freeing would restart it (and
+// churn its neighbours) when it reappears 4s later.
+const GRACE_MS = 10_000;
 
 type Cell =
-  | { kind: "video"; v: VideoDTO; key: string; play: boolean }
+  | { kind: "video"; v: VideoDTO; key: string }
   | { kind: "ph"; key: string; pair: [string, string] };
+
+/** Stable hash of a video id — seeds where its copies land on the wall. */
+function idHash(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h;
+}
 
 function fmtDurShort(sec: number): string {
   return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
@@ -159,40 +181,88 @@ function Projector({
   const [focused, setFocused] = useState<VideoDTO | null>(null);
   const themes = event.themes.length ? event.themes : [{ id: "", name: "", color: "#4D7CFF" }];
 
-  // Static 6×3 grid — no scrolling. The top 2 rows hold real clips, tiled/repeated
-  // so a handful of clips still fill the wall AND each one stays permanently on
-  // screen (no waiting for a scroll to circle back); the bottom row is gradient
-  // placeholders for depth. The full list lives in the table below.
+  // Wall slot assignment. Each clip is repeated across up to 3 slots so a few
+  // clips fill the board; leftover slots are gradient placeholders. The mapping
+  // lives in a ref and is RECONCILED each poll rather than rebuilt: a copy that's
+  // already playing never moves slots (so its <video> never remounts/restarts),
+  // a newly posted clip only takes free slots, and room is made by trimming a
+  // REDUNDANT copy of an over-represented clip — never someone's last one.
+  // Reconciling is idempotent, so StrictMode's double useMemo run is harmless.
+  const slotsRef = useRef<(string | null)[]>(new Array(SLOTS).fill(null));
+  const knownRef = useRef<Map<string, { v: VideoDTO; missingSince: number | null }>>(new Map());
   const cells = useMemo<Cell[]>(() => {
-    const REPEAT = 3; // each clip claims up to 3 spread slots → a few clips fill the wall
-    const bySlot: (VideoDTO | null)[] = new Array(REAL_CELLS).fill(null);
-    // Assign oldest-first: a newly posted clip is placed LAST and only takes
-    // still-free slots, so existing clips keep their exact slot (and never remount
-    // / restart) when someone new posts. Cells are keyed by slot index, so the
-    // <video> nodes are reused across the 4s polls too.
-    const ordered = [...live].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    for (const v of ordered) {
-      let base = 0;
-      for (let i = 0; i < v.id.length; i++) base = (base * 31 + v.id.charCodeAt(i)) >>> 0;
-      let placed = 0;
-      for (let r = 0; r < REAL_CELLS && placed < REPEAT; r++) {
-        const slot = (base + r * 4) % REAL_CELLS;
-        if (!bySlot[slot]) { bySlot[slot] = v; placed++; }
+    const slots = slotsRef.current;
+    const known = knownRef.current;
+    const now = Date.now();
+    // The sidebar promises "it appears here in seconds", so past the play budget
+    // the wall carries the NEWEST clips; older ones live on in the table below.
+    const ordered = [...live].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    const eligible = ordered.slice(-MAX_AUTOPLAY);
+    const eligIds = new Set(eligible.map((v) => v.id));
+    const liveIds = new Set(live.map((v) => v.id));
+    for (const v of eligible) known.set(v.id, { v, missingSince: null });
+
+    // Free slots whose clip left. A clip that merely rotated out of the newest-N
+    // frees immediately (deterministic); one that VANISHED from the poll keeps
+    // its slots for GRACE_MS in case it's a transient read blip.
+    const keep = new Set<string>(eligIds);
+    for (const id of new Set(slots.filter(Boolean) as string[])) {
+      if (eligIds.has(id)) continue;
+      const k = known.get(id);
+      if (k && !liveIds.has(id)) {
+        if (k.missingSince == null) k.missingSince = now;
+        if (now - k.missingSince < GRACE_MS) keep.add(id);
       }
     }
-    const out: Cell[] = [];
-    let playing = 0;
-    for (let i = 0; i < COLS * WALL_ROWS; i++) {
-      const v = i < REAL_CELLS ? bySlot[i] : null;
-      if (v) {
-        const play = playing < MAX_AUTOPLAY;
-        if (play) playing++;
-        out.push({ kind: "video", v, key: `cell-${i}`, play });
-      } else {
-        out.push({ kind: "ph", key: `cell-${i}`, pair: pairFor(themes[i % themes.length], `ph-${i}`) });
+    for (let i = 0; i < SLOTS; i++) if (slots[i] && !keep.has(slots[i]!)) slots[i] = null;
+    for (const id of [...known.keys()]) if (!keep.has(id)) known.delete(id);
+
+    // Copy targets, oldest-first: everyone gets one slot before anyone repeats,
+    // then the leftover budget tops clips up to at most 3 copies each. Clips in
+    // their grace window still count — their copies are still decoding.
+    const holders = [...keep].map((id) => known.get(id)!.v)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    const base = holders.length ? Math.floor(MAX_AUTOPLAY / holders.length) : 0;
+    const rem = holders.length ? MAX_AUTOPLAY % holders.length : 0;
+    const target = new Map<string, number>();
+    holders.forEach((v, i) => target.set(v.id, Math.max(1, Math.min(3, base + (i < rem ? 1 : 0)))));
+
+    // Trim over-target copies. Scanning from the highest slot index means each
+    // clip loses its edge-row copies first and keeps its always-visible one.
+    const count = new Map<string, number>();
+    slots.forEach((id) => { if (id) count.set(id, (count.get(id) || 0) + 1); });
+    for (let i = SLOTS - 1; i >= 0; i--) {
+      const id = slots[i];
+      if (id && (count.get(id) || 0) > (target.get(id) || 0)) {
+        count.set(id, count.get(id)! - 1);
+        slots[i] = null;
       }
     }
-    return out;
+    // Place missing copies into FREE slots only: middle rows first (always on
+    // screen), edge rows as overflow. The probe starts at the id's hash and
+    // strides 5 (coprime with 12), so copies spread across the columns.
+    const probe = (h: number, ring: 0 | 1): number => {
+      for (let k = 0; k < MID; k++) {
+        const s = ring * MID + ((h + k * 5) % MID);
+        if (!slots[s]) return s;
+      }
+      return -1;
+    };
+    for (let round = 1; round <= 3; round++) {
+      for (const v of holders) {
+        if ((count.get(v.id) || 0) >= Math.min(round, target.get(v.id) || 0)) continue;
+        const h = idHash(v.id) + (round - 1) * 7;
+        let s = probe(h, 0);
+        if (s === -1) s = probe(h, 1);
+        if (s !== -1) { slots[s] = v.id; count.set(v.id, (count.get(v.id) || 0) + 1); }
+      }
+    }
+    return slots.map((id, i) => {
+      const k = id ? known.get(id) : undefined;
+      return k
+        ? ({ kind: "video", v: k.v, key: `s${i}` } as Cell)
+        : ({ kind: "ph", key: `s${i}`, pair: pairFor(themes[i % themes.length], `ph-${i}`) } as Cell);
+    });
   }, [live, themes]);
 
   return (
@@ -215,14 +285,32 @@ function Projector({
               </div>
             </div>
 
-            <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `repeat(${COLS}, 1fr)`, gridTemplateRows: `repeat(${WALL_ROWS}, 1fr)`, gap: 12, marginTop: 22, overflow: "hidden" }}>
-              {cells.map((c) =>
-                c.kind === "video" ? (
-                  <BigCard key={c.key} video={c.v} theme={themeById(event.themes, c.v.theme)} autoPlay={c.play} onOpen={() => setFocused(c.v)} />
-                ) : (
-                  <PlaceholderCard key={c.key} pair={c.pair} />
-                )
-              )}
+            {/* The ambient drifting wall. Each column is a 200%-tall strip of 4
+                cards (edge, middle, middle, edge) sliding between its two halves
+                — wallUp/wallDown with animation-direction: alternate, so the
+                drift gently reverses instead of wrapping. Every card is ONE
+                <video> that never leaves the DOM: nothing to clone, so nothing
+                can desync or restart at a loop seam. No hover-pause: pausing on
+                mouseover made it jolt. */}
+            <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 12, marginTop: 22, overflow: "hidden", WebkitMaskImage: wallMask, maskImage: wallMask }}>
+              {Array.from({ length: COLS }, (_, ci) => (
+                <div key={`col-${ci}`} style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden" }}>
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "200%", display: "flex", flexDirection: "column", willChange: "transform", animation: `wall${ci % 2 ? "Down" : "Up"} ${DURS[ci % DURS.length]}s linear infinite alternate` }}>
+                    {[MID + ci, ci, COLS + ci, MID + COLS + ci].map((si) => {
+                      const c = cells[si];
+                      return (
+                        <div key={c.key} style={{ flex: 1, minHeight: 0, padding: "6px 0" }}>
+                          {c.kind === "video" ? (
+                            <BigCard video={c.v} theme={themeById(event.themes, c.v.theme)} autoPlay onOpen={() => setFocused(c.v)} />
+                          ) : (
+                            <PlaceholderCard pair={c.pair} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -299,22 +387,24 @@ function FacilitatorTable({ live, themes, onOpen }: { live: VideoDTO[]; themes: 
 
 /**
  * Small first-frame preview for the table. The <video> (metadata-only, #t=0.1 to
- * paint a frame) is mounted only once the row scrolls near the viewport, so a
- * 100-clip event doesn't spin up 100 media elements at once.
+ * paint a frame) is mounted only while the row is near the viewport — and
+ * UNMOUNTED again when it scrolls away. Browsers cap media elements per page
+ * (Chrome ~75); if thumbs latched on, one full scroll of a big table would
+ * exhaust the cap and the next player (the focus modal!) would refuse to load.
  */
 function TableThumb({ video, theme }: { video: VideoDTO; theme: Theme }) {
   const ref = useRef<HTMLDivElement>(null);
   const [show, setShow] = useState(false);
   useEffect(() => {
     const el = ref.current;
-    if (!el || show || !video.mediaUrl) return;
+    if (!el || !video.mediaUrl) return;
     const io = new IntersectionObserver(
-      (entries) => { if (entries.some((e) => e.isIntersecting)) { setShow(true); io.disconnect(); } },
+      (entries) => setShow(entries.some((e) => e.isIntersecting)),
       { rootMargin: "300px" }
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [show, video.mediaUrl]);
+  }, [video.mediaUrl]);
   return (
     <div ref={ref} style={{ width: 58, height: 78, borderRadius: 10, overflow: "hidden", flex: "none", position: "relative", background: video.posterUrl ? `#000 url(${video.posterUrl}) center/cover` : stillBg(pairFor(theme, video.id)) }}>
       {show && video.mediaUrl && (
@@ -341,11 +431,12 @@ function FocusModal({ video, theme, onClose }: { video: VideoDTO; theme: Theme; 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      if (timer.current) clearTimeout(timer.current);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+  // The retry timer must only die on unmount. onClose gets a fresh identity on
+  // every 4s poll re-render; clearing the timer in that effect's cleanup would
+  // silently cancel a pending retry and strand the modal on "Loading…".
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   // A clip can be tapped inside its brief upload window (record is live before the
   // S3 object lands). A <video> that errored won't re-fetch itself, so retry with
@@ -456,6 +547,8 @@ function BigCard({ video, theme, autoPlay, onOpen }: { video: VideoDTO; theme: T
 /* ------------------------------------------------------------------ styles */
 
 const tableRow: CSSProperties = { display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "10px 14px", borderRadius: 14, border: "1px solid rgba(255,255,255,.07)", background: "rgba(255,255,255,.03)", cursor: "pointer", fontFamily: "inherit", color: INK };
+// Fades the marquee's cropped edges so cards dissolve at the top/bottom of the wall.
+const wallMask = "linear-gradient(180deg,transparent,#000 6%,#000 94%,transparent)";
 const canvasBg = "radial-gradient(1300px 740px at 50% -8%, #223159, #0C1024 60%)";
 const canvasCenter: CSSProperties = { minHeight: "100vh", background: canvasBg, color: INK, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 };
 const mobileCanvas: CSSProperties = {

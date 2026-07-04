@@ -65,7 +65,7 @@ Single-page app, built to static assets and served from S3 via CloudFront.
 Routes:
 - `/` — **Landing**: create an event (organizer) or join one by code.
 - `/e/:eventId` — **Attendee** app (phone): the Wall, watch, Themes, You, and the
-  upload flow (record/pick → trim → details → review → live).
+  upload flow (record/pick → details → review → live).
 - `/e/:eventId/big` — **Big Screen**: animated wall + scan-to-upload QR + trending
   themes, for the projector at the venue.
 
