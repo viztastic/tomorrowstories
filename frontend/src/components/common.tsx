@@ -16,9 +16,9 @@ export function PlayBadge({ size = 44 }: { size?: number }) {
           width: size,
           height: size,
           borderRadius: "50%",
-          background: "rgba(255,255,255,.14)",
+          background: "rgba(var(--ts-neutral-rgb),.14)",
           backdropFilter: "blur(6px)",
-          border: "1px solid rgba(255,255,255,.3)",
+          border: "1px solid rgba(var(--ts-neutral-rgb),.3)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -33,7 +33,7 @@ export function PlayBadge({ size = 44 }: { size?: number }) {
   );
 }
 
-export function Spinner({ size = 22, color = "#F4F1EC" }: { size?: number; color?: string }) {
+export function Spinner({ size = 22, color = "currentColor" }: { size?: number; color?: string }) {
   return (
     <span
       style={{
@@ -41,7 +41,7 @@ export function Spinner({ size = 22, color = "#F4F1EC" }: { size?: number; color
         width: size,
         height: size,
         borderRadius: "50%",
-        border: `2px solid rgba(255,255,255,.18)`,
+        border: `2px solid rgba(var(--ts-neutral-rgb),.18)`,
         borderTopColor: color,
         animation: "spin .8s linear infinite",
       }}

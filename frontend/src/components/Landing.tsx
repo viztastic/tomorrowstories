@@ -26,16 +26,16 @@ const page: React.CSSProperties = {
 const card: React.CSSProperties = {
   width: "100%",
   maxWidth: 460,
-  background: "rgba(255,255,255,.04)",
-  border: "1px solid rgba(255,255,255,.09)",
+  background: "rgba(var(--ts-neutral-rgb),.04)",
+  border: "1px solid rgba(var(--ts-neutral-rgb),.09)",
   borderRadius: 24,
   padding: 30,
 };
 
 const input: React.CSSProperties = {
   width: "100%",
-  background: "rgba(255,255,255,.06)",
-  border: "1px solid rgba(255,255,255,.1)",
+  background: "rgba(var(--ts-neutral-rgb),.06)",
+  border: "1px solid rgba(var(--ts-neutral-rgb),.1)",
   borderRadius: 14,
   padding: "15px 16px",
   color: INK,
@@ -65,7 +65,7 @@ const outlineBtn: React.CSSProperties = {
   width: "100%",
   padding: 15,
   borderRadius: 15,
-  border: "1px solid rgba(255,255,255,.22)",
+  border: "1px solid rgba(var(--ts-neutral-rgb),.22)",
   cursor: "pointer",
   fontFamily: "inherit",
   fontWeight: 700,
@@ -184,7 +184,19 @@ export function Landing({ mode = "full" }: { mode?: LandingMode }) {
   // On the dedicated /create page this is the only action, so it gets the
   // filled CTA. On the combined "/" page it stays the outlined secondary.
   const createPrimary = mode === "create";
-  const createCard = (
+  // Signed-out organizers get a simple "host?" pitch → sign up. The full create
+  // form (name + theme + topics) only appears once you're signed in.
+  const createCard = needsSignIn ? (
+    <div style={card}>
+      {mode === "full" && <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".09em", color: MUTED2 }}>FOR ORGANIZERS</div>}
+      <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: createPrimary ? 23 : 20, letterSpacing: "-.02em", marginTop: mode === "full" ? 8 : 0 }}>Hosting an event?</div>
+      <div style={{ fontSize: 13.5, color: MUTED, marginTop: 6, lineHeight: 1.5 }}>
+        Create a story wall people join by scanning a QR — choose a theme, set your topics, and it plays on your big screen. Free to start.
+      </div>
+      <button style={{ ...primaryBtn, marginTop: 18 }} onClick={() => nav("/sign-in")}>Sign up — it’s free</button>
+      <button style={{ ...outlineBtn, marginTop: 10 }} onClick={() => nav("/sign-in")}>Sign in</button>
+    </div>
+  ) : (
     <div style={card}>
       {mode === "full" && <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".09em", color: MUTED2 }}>FOR ORGANIZERS</div>}
       <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: createPrimary ? 23 : 20, letterSpacing: "-.02em", marginTop: mode === "full" ? 8 : 0 }}>Start an event</div>
@@ -214,7 +226,7 @@ export function Landing({ mode = "full" }: { mode?: LandingMode }) {
 
       <button style={{ ...(createPrimary ? primaryBtn : outlineBtn), marginTop: 16 }} onClick={create} disabled={creating}>
         {creating ? <Spinner size={18} /> : null}
-        {needsSignIn ? "Sign in to create an event" : creating ? "Creating…" : "Create event & open big screen"}
+        {creating ? "Creating…" : "Create event & open big screen"}
       </button>
     </div>
   );

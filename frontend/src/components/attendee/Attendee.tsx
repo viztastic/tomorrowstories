@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { CSSProperties } from "react";
 import type { LocalComment } from "../../types";
 import { api } from "../../api";
-import { ACCENT, BRAND_GRAD, FONT_DISPLAY, INK, MUTED, MUTED2, ON_ACCENT, OVERLAY_BG, PAGE_BG, themeById } from "../../design";
+import { ACCENT, BRAND_GRAD, CHIP_ON, CHIP_ON_INK, FONT_DISPLAY, HEADER_BG, INK, MUTED, MUTED2, OVERLAY_BG, PAGE_BG, themeById } from "../../design";
 import { PaletteProvider } from "../../PaletteProvider";
 import { Spinner } from "../common";
 import { useEventData } from "../../useEventData";
@@ -203,7 +203,7 @@ function Overlay({ isMobile, children }: { isMobile: boolean; children: React.Re
   }
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(4,3,10,.72)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ width: "100%", maxWidth: 440, height: "min(880px, 92vh)", background: OVERLAY_BG, borderRadius: 28, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 40px 120px -30px #000, 0 0 0 1px rgba(255,255,255,.06)" }}>
+      <div style={{ width: "100%", maxWidth: 440, height: "min(880px, 92vh)", background: OVERLAY_BG, borderRadius: 28, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 40px 120px -30px #000, 0 0 0 1px rgba(var(--ts-neutral-rgb),.06)" }}>
         {children}
       </div>
     </div>
@@ -214,7 +214,7 @@ function HeaderTab({ label, active, onClick }: { label: string; active: boolean;
   return (
     <button
       onClick={onClick}
-      style={{ padding: "8px 14px", borderRadius: 999, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 14, color: active ? ON_ACCENT : "#C9C6D4", background: active ? INK : "transparent" }}
+      style={{ padding: "8px 14px", borderRadius: 999, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 14, color: active ? CHIP_ON_INK : MUTED, background: active ? CHIP_ON : "transparent" }}
     >
       {label}
     </button>
@@ -247,11 +247,11 @@ const headerStyle: CSSProperties = {
   justifyContent: "space-between",
   gap: 12,
   padding: "calc(env(safe-area-inset-top) + 12px) 16px 12px",
-  background: "rgba(12,16,36,.72)",
+  background: HEADER_BG,
   backdropFilter: "blur(12px)",
-  borderBottom: "1px solid rgba(255,255,255,.06)",
+  borderBottom: "1px solid rgba(var(--ts-neutral-rgb),.06)",
 };
-const bigLink: CSSProperties = { fontSize: 12.5, color: "#C9C6D4", fontWeight: 700, textDecoration: "none", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.04)", whiteSpace: "nowrap" };
+const bigLink: CSSProperties = { fontSize: 12.5, color: MUTED, fontWeight: 700, textDecoration: "none", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(var(--ts-neutral-rgb),.12)", background: "rgba(var(--ts-neutral-rgb),.04)", whiteSpace: "nowrap" };
 const addBtn: CSSProperties = { display: "flex", alignItems: "center", gap: 7, padding: "9px 15px", borderRadius: 999, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13.5, color: "#fff", background: BRAND_GRAD };
 const bottomNav: CSSProperties = {
   position: "fixed",
@@ -263,8 +263,8 @@ const bottomNav: CSSProperties = {
   alignItems: "flex-start",
   justifyContent: "space-around",
   padding: "12px 24px calc(10px + env(safe-area-inset-bottom))",
-  borderTop: "1px solid rgba(255,255,255,.07)",
-  background: "rgba(11,8,18,.92)",
+  borderTop: "1px solid rgba(var(--ts-neutral-rgb),.07)",
+  background: HEADER_BG,
   backdropFilter: "blur(12px)",
 };
 const fabFixed: CSSProperties = {

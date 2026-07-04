@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Theme, VideoDTO } from "../../types";
-import { FONT_DISPLAY, MUTED, MUTED2, ON_ACCENT, themeById } from "../../design";
+import { CHIP_ON, CHIP_ON_INK, FONT_DISPLAY, MUTED, MUTED2, ON_ACCENT, themeById } from "../../design";
 import { VideoCard } from "./VideoCard";
 
 function chipStyle(on: boolean, fill: string): CSSProperties {
@@ -12,9 +12,9 @@ function chipStyle(on: boolean, fill: string): CSSProperties {
     fontWeight: 700,
     cursor: "pointer",
     fontFamily: "inherit",
-    border: "1px solid " + (on ? fill : "rgba(255,255,255,.13)"),
-    background: on ? fill : "rgba(255,255,255,.04)",
-    color: on ? ON_ACCENT : "#C9C6D4",
+    border: "1px solid " + (on ? fill : "rgba(var(--ts-neutral-rgb),.13)"),
+    background: on ? fill : "rgba(var(--ts-neutral-rgb),.04)",
+    color: on ? CHIP_ON_INK : MUTED,
   };
 }
 
@@ -26,9 +26,9 @@ function followStyle(on: boolean, color: string): CSSProperties {
     fontWeight: 700,
     cursor: "pointer",
     fontFamily: "inherit",
-    border: "1px solid " + (on ? color : "rgba(255,255,255,.14)"),
+    border: "1px solid " + (on ? color : "rgba(var(--ts-neutral-rgb),.14)"),
     background: on ? color : "transparent",
-    color: on ? ON_ACCENT : "#C9C6D4",
+    color: on ? ON_ACCENT : MUTED,
   };
 }
 
@@ -67,7 +67,7 @@ export function Wall({
             <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>{videos.length} stories · updating live</span>
           </div>
         </div>
-        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(255,255,255,.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(var(--ts-neutral-rgb),.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <circle cx="11" cy="11" r="7" stroke="#C9C6D4" strokeWidth="1.8" />
             <path d="M16.5 16.5L21 21" stroke="#C9C6D4" strokeWidth="1.8" strokeLinecap="round" />
@@ -78,7 +78,7 @@ export function Wall({
       <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "6px 18px 14px" }}>
         {chips.map((c) => {
           const on = activeTheme === c.id;
-          const fill = c.id === "all" ? "#F4F1EC" : c.color;
+          const fill = c.id === "all" ? CHIP_ON : c.color;
           return (
             <button key={c.id} style={chipStyle(on, fill)} onClick={() => setActiveTheme(c.id)}>
               {c.name}

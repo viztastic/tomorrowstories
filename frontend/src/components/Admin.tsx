@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { ACCENT, BRAND_GRAD, FONT_DISPLAY, INK, MUTED, MUTED2 } from "../design";
+import { ACCENT, BRAND_GRAD, CHIP_ON, CHIP_ON_INK, FONT_DISPLAY, INK, MUTED, MUTED2 } from "../design";
 import { Spinner } from "./common";
 import { OrganizerButton } from "../auth";
 import { PalettePicker } from "./organizer/PalettePicker";
@@ -44,7 +44,15 @@ export function Admin() {
         {loading ? (
           <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}><Spinner size={26} /></div>
         ) : events.length === 0 ? (
-          <div style={{ color: MUTED2, padding: "40px 0", textAlign: "center" }}>No events yet — create your first one.</div>
+          <div style={{ ...card, textAlign: "center", padding: "40px 24px" }}>
+            <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 22, letterSpacing: "-.02em" }}>Create your first event</div>
+            <div style={{ color: MUTED, fontSize: 14, marginTop: 8, lineHeight: 1.5, maxWidth: 380, margin: "8px auto 0" }}>
+              Pick a theme, set the topics people can post to, and get a QR your audience scans to join.
+            </div>
+            <Link to="/create" style={{ ...primaryBtn, width: "auto", padding: "12px 22px", textDecoration: "none", display: "inline-flex", marginTop: 20 }}>
+              Create an event
+            </Link>
+          </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {events.map((e) => (
@@ -140,9 +148,9 @@ function SessionCard({ ev, onDeleted, onUpdated }: { ev: EventDTO; onDeleted: ()
     <div style={card}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 18 }}>{ev.name}</span>
-        <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: "#0C0A12", background: "#F4F1EC", padding: "3px 9px", borderRadius: 999 }}>{ev.code}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: CHIP_ON_INK, background: CHIP_ON, padding: "3px 9px", borderRadius: 999 }}>{ev.code}</span>
         {ev.creatorIp && (
-          <span title="Creator IP" style={{ fontSize: 11.5, fontWeight: 700, color: "#C9C6D4", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", padding: "3px 9px", borderRadius: 8, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>⚲ {ev.creatorIp}</span>
+          <span title="Creator IP" style={{ fontSize: 11.5, fontWeight: 700, color: "#C9C6D4", background: "rgba(var(--ts-neutral-rgb),.06)", border: "1px solid rgba(var(--ts-neutral-rgb),.1)", padding: "3px 9px", borderRadius: 8, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>⚲ {ev.creatorIp}</span>
         )}
         <span style={{ fontSize: 12, color: MUTED2, marginLeft: "auto" }}>{fmtDate(ev.createdAt)}</span>
       </div>
@@ -152,7 +160,7 @@ function SessionCard({ ev, onDeleted, onUpdated }: { ev: EventDTO; onDeleted: ()
       </div>
       {err && <div style={{ ...errBox, marginTop: 12 }}>{err}</div>}
       {editing && (
-        <div style={{ marginTop: 14, padding: 14, borderRadius: 14, background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.08)" }}>
+        <div style={{ marginTop: 14, padding: 14, borderRadius: 14, background: "rgba(var(--ts-neutral-rgb),.03)", border: "1px solid rgba(var(--ts-neutral-rgb),.08)" }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".07em", color: MUTED2, marginBottom: 10 }}>WALL & APP THEME</div>
           <PalettePicker value={draftPalette} onChange={setDraftPalette} />
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".07em", color: MUTED2, margin: "18px 0 10px" }}>TOPICS ATTENDEES CAN PICK</div>
@@ -237,10 +245,10 @@ const page: CSSProperties = {
   alignItems: "center",
   padding: "calc(40px + env(safe-area-inset-top)) 18px calc(40px + env(safe-area-inset-bottom))",
 };
-const card: CSSProperties = { width: "100%", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.09)", borderRadius: 20, padding: 20 };
+const card: CSSProperties = { width: "100%", background: "rgba(var(--ts-neutral-rgb),.04)", border: "1px solid rgba(var(--ts-neutral-rgb),.09)", borderRadius: 20, padding: 20 };
 const primaryBtn: CSSProperties = { width: "100%", padding: 15, borderRadius: 14, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 15, color: "#fff", background: BRAND_GRAD, display: "flex", alignItems: "center", justifyContent: "center", gap: 9 };
-const chip: CSSProperties = { flex: "none", padding: "7px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,.14)", background: "rgba(255,255,255,.05)", color: INK, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };
-const linkRow: CSSProperties = { display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 12, padding: "9px 11px" };
+const chip: CSSProperties = { flex: "none", padding: "7px 12px", borderRadius: 10, border: "1px solid rgba(var(--ts-neutral-rgb),.14)", background: "rgba(var(--ts-neutral-rgb),.05)", color: INK, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };
+const linkRow: CSSProperties = { display: "flex", alignItems: "center", gap: 8, background: "rgba(var(--ts-neutral-rgb),.03)", border: "1px solid rgba(var(--ts-neutral-rgb),.06)", borderRadius: 12, padding: "9px 11px" };
 const dangerGhost: CSSProperties = { flex: "none", padding: "7px 14px", borderRadius: 10, border: "1px solid rgba(255,61,87,.4)", background: "transparent", color: "#FF7A9C", fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };
 const dangerBtn: CSSProperties = { flex: "none", padding: "7px 14px", borderRadius: 10, border: "none", background: "#E23558", color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };
 const errBox: CSSProperties = { marginTop: 14, padding: "10px 13px", borderRadius: 12, background: "rgba(255,61,87,.12)", border: "1px solid rgba(255,61,87,.35)", color: "#FF9DB0", fontSize: 13, fontWeight: 600 };

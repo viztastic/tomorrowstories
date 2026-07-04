@@ -122,17 +122,17 @@ export function UploadFlow({
           <div style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 800, fontSize: 27, letterSpacing: "-.02em", marginTop: 22 }}>
             {postedStatus === "live" ? "You're live on the wall!" : "You're on the wall!"}
           </div>
-          <div style={{ fontSize: 14, color: "#9E99AD", lineHeight: 1.5, marginTop: 8, maxWidth: 260 }}>
+          <div style={{ fontSize: 14, color: MUTED, lineHeight: 1.5, marginTop: 8, maxWidth: 260 }}>
             {postedStatus === "live" ? (
-              <>Your clip is now playing in <b style={{ color: "#F4F1EC" }}>{dTheme.name}</b> on the wall — go watch it with the room.</>
+              <>Your clip is now playing in <b style={{ color: INK }}>{dTheme.name}</b> on the wall — go watch it with the room.</>
             ) : (
-              <>Your clip is uploading to <b style={{ color: "#F4F1EC" }}>{dTheme.name}</b> — it appears on the wall as soon as it finishes processing (usually under a minute).</>
+              <>Your clip is uploading to <b style={{ color: INK }}>{dTheme.name}</b> — it appears on the wall as soon as it finishes processing (usually under a minute).</>
             )}
           </div>
           <button onClick={onClose} style={{ marginTop: 28, width: "100%", maxWidth: 260, padding: 15, borderRadius: 15, border: "none", background: BRAND_GRAD, color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer", fontFamily: "inherit" }}>
             See it on the wall
           </button>
-          <button onClick={reset} style={{ marginTop: 11, width: "100%", maxWidth: 260, padding: 15, borderRadius: 15, border: "1px solid rgba(255,255,255,.14)", background: "transparent", color: "#F4F1EC", fontWeight: 700, fontSize: 15, cursor: "pointer", fontFamily: "inherit" }}>
+          <button onClick={reset} style={{ marginTop: 11, width: "100%", maxWidth: 260, padding: 15, borderRadius: 15, border: "1px solid rgba(var(--ts-neutral-rgb),.14)", background: "transparent", color: INK, fontWeight: 700, fontSize: 15, cursor: "pointer", fontFamily: "inherit" }}>
             Post another story
           </button>
         </div>
@@ -154,15 +154,15 @@ export function UploadFlow({
 
       <div style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px 4px" }}>
         <button onClick={back} style={iconBtn}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5L8 12L15 19" stroke="#F4F1EC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5L8 12L15 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
         <div style={{ fontWeight: 700, fontSize: 15 }}>{STEP_LABELS[step]}</div>
         <button onClick={onClose} style={iconBtn}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="#F4F1EC" strokeWidth="2" strokeLinecap="round" /></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
         </button>
       </div>
 
-      <div style={{ flex: "none", height: 4, margin: "8px 16px 0", borderRadius: 2, background: "rgba(255,255,255,.08)" }}>
+      <div style={{ flex: "none", height: 4, margin: "8px 16px 0", borderRadius: 2, background: "rgba(var(--ts-neutral-rgb),.08)" }}>
         <div style={{ width: `${(Math.min(step, 3) / 3) * 100}%`, height: "100%", borderRadius: 2, background: BRAND_GRAD, transition: "width .3s" }} />
       </div>
 
@@ -184,12 +184,12 @@ export function UploadFlow({
                 </span>
               </button>
               <button onClick={pickLibrary} style={choiceOutline}>
-                <span style={{ ...choiceIcon, background: "rgba(255,255,255,.08)" }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="#C9C6D4" strokeWidth="1.8" /><path d="M3 16l5-4 4 3 4-4 5 4" stroke="#C9C6D4" strokeWidth="1.8" strokeLinejoin="round" /></svg>
+                <span style={{ ...choiceIcon, background: "rgba(var(--ts-neutral-rgb),.08)" }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.8" /><path d="M3 16l5-4 4 3 4-4 5 4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" /></svg>
                 </span>
                 <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
                   <span style={{ fontWeight: 800, fontSize: 16 }}>Choose from camera roll</span>
-                  <span style={{ fontSize: 12.5, color: "#9E99AD" }}>Upload a video you already recorded</span>
+                  <span style={{ fontSize: 12.5, color: MUTED }}>Upload a video you already recorded</span>
                 </span>
               </button>
             </div>
@@ -214,7 +214,7 @@ export function UploadFlow({
               {themes.map((t) => {
                 const on = themeId === t.id;
                 return (
-                  <button key={t.id} onClick={() => setThemeId(t.id)} style={{ padding: "10px 15px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: "1px solid " + (on ? t.color : "rgba(255,255,255,.14)"), background: on ? t.color : "rgba(255,255,255,.04)", color: on ? ON_ACCENT : "#C9C6D4" }}>
+                  <button key={t.id} onClick={() => setThemeId(t.id)} style={{ padding: "10px 15px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: "1px solid " + (on ? t.color : "rgba(var(--ts-neutral-rgb),.14)"), background: on ? t.color : "rgba(var(--ts-neutral-rgb),.04)", color: on ? ON_ACCENT : MUTED }}>
                     {t.name}
                   </button>
                 );
@@ -227,7 +227,7 @@ export function UploadFlow({
           <>
             <div style={h1}>Ready to post?</div>
             <div style={sub}>This goes live on the wall right away.</div>
-            <div style={{ marginTop: 20, display: "flex", gap: 14, alignItems: "center", padding: 14, borderRadius: 18, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)" }}>
+            <div style={{ marginTop: 20, display: "flex", gap: 14, alignItems: "center", padding: 14, borderRadius: 18, background: "rgba(var(--ts-neutral-rgb),.05)", border: "1px solid rgba(var(--ts-neutral-rgb),.08)" }}>
               <div style={{ position: "relative", width: 78, height: 104, borderRadius: 14, flex: "none", overflow: "hidden" }}>
                 {fileUrl ? <video src={fileUrl} muted playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={fillBg} />}
               </div>
@@ -244,7 +244,7 @@ export function UploadFlow({
                   <span>{progress < 100 ? "Uploading your clip…" : "Handing off for processing…"}</span>
                   <span>{progress}%</span>
                 </div>
-                <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,.08)", overflow: "hidden" }}>
+                <div style={{ height: 6, borderRadius: 3, background: "rgba(var(--ts-neutral-rgb),.08)", overflow: "hidden" }}>
                   <div style={{ width: `${Math.max(progress, 4)}%`, height: "100%", borderRadius: 3, background: BRAND_GRAD, transition: "width .2s" }} />
                 </div>
               </div>
@@ -262,7 +262,7 @@ export function UploadFlow({
         ) : step === 2 || (step === 1 && file) ? (
           // Step 1 keeps a Continue once a clip is picked, so backing out of
           // Details doesn't strand you re-picking the same file.
-          <button onClick={next} style={{ width: "100%", padding: 15, borderRadius: 15, border: "none", cursor: canContinue ? "pointer" : "not-allowed", fontFamily: "inherit", fontWeight: 800, fontSize: 15, color: canContinue ? "#fff" : "#726D82", background: canContinue ? BRAND_GRAD : "rgba(255,255,255,.06)" }}>
+          <button onClick={next} style={{ width: "100%", padding: 15, borderRadius: 15, border: "none", cursor: canContinue ? "pointer" : "not-allowed", fontFamily: "inherit", fontWeight: 800, fontSize: 15, color: canContinue ? "#fff" : "#726D82", background: canContinue ? BRAND_GRAD : "rgba(var(--ts-neutral-rgb),.06)" }}>
             Continue
           </button>
         ) : null}
@@ -271,10 +271,10 @@ export function UploadFlow({
   );
 }
 
-const iconBtn: CSSProperties = { width: 38, height: 38, borderRadius: "50%", background: "rgba(255,255,255,.07)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" };
+const iconBtn: CSSProperties = { width: 38, height: 38, borderRadius: "50%", background: "rgba(var(--ts-neutral-rgb),.07)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: INK };
 const choicePrimary: CSSProperties = { display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "16px 18px", borderRadius: 16, border: "none", cursor: "pointer", fontFamily: "inherit", color: "#fff", background: BRAND_GRAD, textAlign: "left" };
-const choiceOutline: CSSProperties = { display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "16px 18px", borderRadius: 16, border: "1px solid rgba(255,255,255,.16)", cursor: "pointer", fontFamily: "inherit", color: INK, background: "rgba(255,255,255,.05)", textAlign: "left" };
-const choiceIcon: CSSProperties = { width: 42, height: 42, flex: "none", borderRadius: 12, background: "rgba(255,255,255,.18)", display: "flex", alignItems: "center", justifyContent: "center" };
+const choiceOutline: CSSProperties = { display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "16px 18px", borderRadius: 16, border: "1px solid rgba(var(--ts-neutral-rgb),.16)", cursor: "pointer", fontFamily: "inherit", color: INK, background: "rgba(var(--ts-neutral-rgb),.05)", textAlign: "left" };
+const choiceIcon: CSSProperties = { width: 42, height: 42, flex: "none", borderRadius: 12, background: "rgba(var(--ts-neutral-rgb),.18)", display: "flex", alignItems: "center", justifyContent: "center" };
 const h1: CSSProperties = { fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 800, fontSize: 24, letterSpacing: "-.02em" };
-const sub: CSSProperties = { fontSize: 13.5, color: "#9E99AD", marginTop: 6 };
-const detailInput: CSSProperties = { width: "100%", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 14, padding: "14px 16px", color: "#F4F1EC", fontSize: 15, fontFamily: "inherit", outline: "none" };
+const sub: CSSProperties = { fontSize: 13.5, color: MUTED, marginTop: 6 };
+const detailInput: CSSProperties = { width: "100%", background: "rgba(var(--ts-neutral-rgb),.06)", border: "1px solid rgba(var(--ts-neutral-rgb),.1)", borderRadius: 14, padding: "14px 16px", color: INK, fontSize: 15, fontFamily: "inherit", outline: "none" };

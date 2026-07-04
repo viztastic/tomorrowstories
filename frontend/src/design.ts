@@ -28,6 +28,9 @@ export const OVERLAY_BG = "var(--ts-overlay-bg)";
 export const DANGER = "var(--ts-danger)";
 export const DANGER_INK = "var(--ts-danger-ink)";
 export const ON_ACCENT = "var(--ts-on-accent)";
+export const HEADER_BG = "var(--ts-header-bg)";
+export const CHIP_ON = "var(--ts-chip-on)"; // active tab/filter chip bg
+export const CHIP_ON_INK = "var(--ts-chip-on-ink)"; // text on an active chip
 
 export const FONT_DISPLAY = "'Bricolage Grotesque', sans-serif";
 export const FONT_UI = "'Hanken Grotesk', system-ui, sans-serif";

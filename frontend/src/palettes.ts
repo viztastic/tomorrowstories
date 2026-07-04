@@ -3,6 +3,12 @@
 // properties on :root by PaletteProvider; the design.ts token constants resolve
 // to var(--ts-*), so almost every existing inline style recolors for free.
 //
+// Light vs dark: the app's neutral surfaces are written as
+// `rgba(var(--ts-neutral-rgb), α)`. Dark palettes set neutral-rgb to white
+// (255,255,255) — panels/borders are white-at-low-alpha over a dark page. A
+// light palette (rally) sets it to a near-black, so the SAME alphas become
+// dark-on-white — one variable flips every surface without touching call sites.
+//
 // This module is React-free on purpose so design.ts can import it safely.
 // Keep the palette IDS in sync with backend/src/shared/config.ts PALETTE_IDS.
 
@@ -22,7 +28,11 @@ export interface Palette {
   overlayBg: string; // upload/video overlay background
   danger: string; // live dot / REC fill
   dangerInk: string; // "LIVE NOW" text tint
-  onAccent: string; // text drawn on top of a solid `accent` fill (must contrast)
+  onAccent: string; // text drawn on top of a solid topic-color chip (must contrast)
+  neutralRgb: string; // "r,g,b" base for rgba() neutral surfaces (white on dark, near-black on light)
+  headerBg: string; // sticky header / bottom-nav frosted background
+  chipOn: string; // active tab/filter chip background
+  chipOnInk: string; // text on an active chip
 }
 
 export const DEFAULT_PALETTE_ID = "aurora";
@@ -46,27 +56,34 @@ export const PALETTES: Record<string, Palette> = {
     danger: "#FF3D57",
     dangerInk: "#FF6B7E",
     onAccent: "#0C0A12",
+    neutralRgb: "255,255,255",
+    headerBg: "rgba(12,16,36,.72)",
+    chipOn: "#F4F1EC",
+    chipOnInk: "#0C0A12",
   },
-  // Bold civic energy — yellow / red / black. The brand gradient runs on RED
-  // (not yellow) because primary buttons use white text, and white-on-yellow
-  // fails contrast; the yellow lives in `accent`, where `onAccent` is dark.
+  // Bold civic energy in a LIGHT layout — white dominant, red the hero accent,
+  // yellow on the active chips. Inspired by the YMCA World Council palette.
   rally: {
     id: "rally",
     name: "Rally",
-    accent: "#F8E11E",
-    brandGrad: "linear-gradient(120deg, #E4002B, #C40024 45%, #111111)",
-    ink: "#FDFBF2",
-    muted: "#BDBAB0",
-    muted2: "#85837B",
-    panel: "rgba(255,255,255,.06)",
-    hairline: "rgba(255,255,255,.10)",
-    pageBg: "radial-gradient(1300px 740px at 50% -8%, #1A1000, #000000 60%)",
-    bodyBg: "#000000",
-    stageBg: "radial-gradient(120% 100% at 50% 0%, #1c1400, #000000)",
-    overlayBg: "#050505",
+    accent: "#E4002B", // red — links, dots, active states (reads well on white)
+    brandGrad: "linear-gradient(135deg, #E4002B, #C40024)", // solid red buttons, white text
+    ink: "#1B1613", // near-black warm text
+    muted: "#6E6660",
+    muted2: "#948B82",
+    panel: "rgba(26,22,19,.05)",
+    hairline: "rgba(26,22,19,.12)",
+    pageBg: "radial-gradient(1200px 700px at 50% -10%, #FFFFFF, #FFF3DE 82%)", // white → faint gold
+    bodyBg: "#FFFFFF",
+    stageBg: "radial-gradient(120% 100% at 50% 0%, #FFFFFF, #FCEECF)",
+    overlayBg: "#FFFFFF",
     danger: "#E4002B",
-    dangerInk: "#FF5A73",
-    onAccent: "#111111",
+    dangerInk: "#C40024", // red readable on white
+    onAccent: "#1B1613",
+    neutralRgb: "26,22,19", // near-black → white-alpha surfaces become dark-on-white
+    headerBg: "rgba(255,255,255,.82)",
+    chipOn: "#F5C400", // yellow active chips (the second accent)
+    chipOnInk: "#1B1613",
   },
   // Cool deep-ocean blue.
   marine: {
@@ -86,6 +103,10 @@ export const PALETTES: Record<string, Palette> = {
     danger: "#FF5C7A",
     dangerInk: "#FF8AA0",
     onAccent: "#04121F",
+    neutralRgb: "255,255,255",
+    headerBg: "rgba(4,18,31,.72)",
+    chipOn: "#EAF6FF",
+    chipOnInk: "#04121F",
   },
 };
 
@@ -112,6 +133,10 @@ const VAR_NAMES: Record<keyof Omit<Palette, "id" | "name">, string> = {
   danger: "--ts-danger",
   dangerInk: "--ts-danger-ink",
   onAccent: "--ts-on-accent",
+  neutralRgb: "--ts-neutral-rgb",
+  headerBg: "--ts-header-bg",
+  chipOn: "--ts-chip-on",
+  chipOnInk: "--ts-chip-on-ink",
 };
 
 /** { "--ts-accent": "#FF6B35", … } for a palette — what PaletteProvider writes to :root. */

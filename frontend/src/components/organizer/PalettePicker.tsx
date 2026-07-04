@@ -20,7 +20,7 @@ export function PalettePicker({ value, onChange }: { value: string; onChange: (i
               width: 108,
               padding: 10,
               borderRadius: 14,
-              border: on ? `2px solid ${INK}` : "2px solid rgba(255,255,255,.14)",
+              border: on ? `2px solid ${INK}` : "2px solid rgba(var(--ts-neutral-rgb),.14)",
               background: p.pageBg,
               cursor: "pointer",
               fontFamily: "inherit",

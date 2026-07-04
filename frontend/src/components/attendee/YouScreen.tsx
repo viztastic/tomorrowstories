@@ -27,11 +27,11 @@ export function YouScreen({
       </div>
 
       <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-        <div style={{ flex: 1, padding: 14, borderRadius: 16, background: "rgba(255,255,255,.05)" }}>
+        <div style={{ flex: 1, padding: 14, borderRadius: 16, background: "rgba(var(--ts-neutral-rgb),.05)" }}>
           <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 24 }}>{myVideos.length}</div>
           <div style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>stories posted</div>
         </div>
-        <div style={{ flex: 1, padding: 14, borderRadius: 16, background: "rgba(255,255,255,.05)" }}>
+        <div style={{ flex: 1, padding: 14, borderRadius: 16, background: "rgba(var(--ts-neutral-rgb),.05)" }}>
           <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 24 }}>{followed.length}</div>
           <div style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>themes followed</div>
         </div>
@@ -49,7 +49,7 @@ export function YouScreen({
           ))}
         </div>
       ) : (
-        <div style={{ padding: "28px 18px", borderRadius: 18, border: "1px dashed rgba(255,255,255,.16)", textAlign: "center" }}>
+        <div style={{ padding: "28px 18px", borderRadius: 18, border: "1px dashed rgba(var(--ts-neutral-rgb),.16)", textAlign: "center" }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>Share your first story</div>
           <div style={{ fontSize: 13, color: MUTED, marginTop: 6, lineHeight: 1.4 }}>60 seconds. Your idea for tomorrow.</div>
           <button onClick={onStartUpload} style={{ marginTop: 14, padding: "12px 22px", borderRadius: 13, border: "none", background: BRAND_GRAD, color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>

@@ -9,7 +9,11 @@ test("organizer's chosen palette recolors the app (yellow/red/black)", async ({ 
   const accent = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--ts-accent").trim()
   );
-  expect(accent.toUpperCase()).toBe("#F8E11E");
+  expect(accent.toUpperCase()).toBe("#E4002B"); // Rally: red accent, white bg
+  const bodyBg = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue("--ts-body-bg").trim()
+  );
+  expect(bodyBg.toUpperCase()).toBe("#FFFFFF"); // light theme
 });
 
 test("the default palette leaves the original accent in place", async ({ page }) => {

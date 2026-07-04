@@ -105,7 +105,7 @@ export function OrganizerButton() {
 /** The /sign-in page. Redirects home once signed in (incl. demo/mock). */
 export function SignInScreen() {
   const { clerkActive, isLoaded, isSignedIn } = useOrganizer();
-  if (isLoaded && isSignedIn) return <Navigate to="/create" replace />;
+  if (isLoaded && isSignedIn) return <Navigate to="/admin" replace />;
   if (!clerkActive) return <Navigate to="/" replace />;
   return (
     <div style={signInPage}>
@@ -116,8 +116,9 @@ export function SignInScreen() {
           <span style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginTop: 4 }}>Organizer sign-in</span>
         </div>
       </div>
-      {/* Clerk renders email-code + social buttons per the dashboard config. */}
-      <SignIn signUpUrl="/sign-in" fallbackRedirectUrl="/create" />
+      {/* Clerk renders email-code + social buttons per the dashboard config.
+          After sign-in, land on the dashboard to create the first event. */}
+      <SignIn signUpUrl="/sign-in" fallbackRedirectUrl="/admin" />
     </div>
   );
 }

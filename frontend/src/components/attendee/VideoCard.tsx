@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Theme, VideoDTO } from "../../types";
-import { fmtLikes, initials, INK, ON_ACCENT, pairFor, stillBg } from "../../design";
+import { fmtLikes, initials, pairFor, stillBg } from "../../design";
 import { Grain, PlayBadge, Spinner } from "../common";
 
 /**
@@ -182,13 +182,14 @@ export function VideoCard({
         {fmtDurShort(video.durationSec)}
       </div>
       {mine && (
-        <div style={{ position: "absolute", top: 9, left: 9, background: INK, color: ON_ACCENT, padding: "3px 8px", borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: ".03em" }}>
+        <div style={{ position: "absolute", top: 9, left: 9, background: "#F7F4EF", color: "#0C0A12", padding: "3px 8px", borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: ".03em" }}>
           YOURS
         </div>
       )}
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "11px 11px 12px" }}>
         <div
           style={{
+            color: "#F7F4EF", // always light — cards are dark media tiles in every theme
             fontWeight: 700,
             fontSize: 13.5,
             lineHeight: 1.22,
