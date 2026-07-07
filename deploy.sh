@@ -88,6 +88,59 @@ else
   printf "\033[33m%s\033[0m\n" "    Set CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY (see CLERK_SETUP.md) and re-run to enable."
 fi
 
+# Custom domain (optional, sticky). With DOMAIN set (or ./.domain saved), the app
+# is served on that apex + www via a Route 53 alias and an ACM cert (us-east-1),
+# instead of the default *.cloudfront.net. Requires a Route 53 hosted zone for the
+# domain whose nameservers the registrar already delegates to (see DEPLOY.md).
+if [ -n "${DOMAIN:-}" ]; then
+  DOMAIN=$(printf '%s' "$DOMAIN" | tr '[:upper:]' '[:lower:]')
+  printf '%s\n' "$DOMAIN" > .domain
+elif [ -f .domain ]; then
+  DOMAIN=$(tr -d '[:space:]' < .domain | tr '[:upper:]' '[:lower:]')
+else
+  DOMAIN=""
+fi
+
+HOSTED_ZONE_ID=""
+if [ -n "$DOMAIN" ]; then
+  HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN" \
+    --query "HostedZones[?Name=='${DOMAIN}.'].Id | [0]" --output text 2>/dev/null | sed 's#/hostedzone/##')
+  if [ -z "$HOSTED_ZONE_ID" ] || [ "$HOSTED_ZONE_ID" = "None" ]; then
+    fail "No Route 53 hosted zone for $DOMAIN. Create one (aws route53 create-hosted-zone --name $DOMAIN …) and delegate your registrar's nameservers to it, or unset DOMAIN."
+  fi
+
+  # Preflight: confirm the registrar actually delegates to this Route 53 zone.
+  # If not, ACM's DNS validation would hang for hours, so bail early with the
+  # exact nameservers to set. Skipped if `dig` isn't installed, or if
+  # NS_PREFLIGHT=skip is set. We check the *registry* (parent-TLD) delegation
+  # rather than a recursive resolver, so a stale public-resolver cache (up to an
+  # hour after the switch) doesn't produce a false "not delegated" — ACM/Clerk
+  # follow the authoritative delegation, which is what this checks.
+  if command -v dig >/dev/null 2>&1 && [ "${NS_PREFLIGHT:-}" != "skip" ]; then
+    ZONE_NS=$(aws route53 get-hosted-zone --id "$HOSTED_ZONE_ID" --query 'DelegationSet.NameServers' --output text 2>/dev/null)
+    PARENT_NS=$(dig +short NS "${DOMAIN#*.}." 2>/dev/null | head -1)
+    if [ -n "$PARENT_NS" ]; then
+      LIVE_NS=" $(dig +noall +authority +norecurse NS "$DOMAIN" @"$PARENT_NS" 2>/dev/null | awk '$4=="NS"{print $5}' | sed 's/\.$//' | tr '\n' ' ') "
+    else
+      LIVE_NS=" $(dig +short NS "$DOMAIN" 2>/dev/null | sed 's/\.$//' | tr '\n' ' ') "
+    fi
+    delegated=0
+    for ns in $ZONE_NS; do
+      case "$LIVE_NS" in *" ${ns%.} "*) delegated=1 ;; esac
+    done
+    if [ "$delegated" -ne 1 ]; then
+      printf "\033[31m%s\033[0m\n" "  ✗ $DOMAIN is not yet delegated to Route 53 — nameservers haven't propagated." >&2
+      printf "\033[33m%s\033[0m\n" "    Set your registrar's nameservers to:" >&2
+      for ns in $ZONE_NS; do printf "      %s\n" "$ns" >&2; done
+      fail "Re-run ./deploy.sh once the nameserver change has propagated (usually 15–60 min)."
+    fi
+  fi
+  bold "  Custom domain: $DOMAIN + www (Route 53 zone $HOSTED_ZONE_ID)"
+  export DOMAIN_NAME="$DOMAIN" HOSTED_ZONE_ID
+else
+  bold "  Custom domain: none (serving on the default CloudFront domain)."
+fi
+
 # ---- install -----------------------------------------------------------------
 bold "▶ Installing dependencies (first run takes a few minutes)…"
 npm install --silent
@@ -98,9 +151,24 @@ npm install --silent
 # ---- bootstrap + deploy infra ------------------------------------------------
 bold "▶ Preparing your AWS account for CDK (one-time bootstrap)…"
 ( cd infra && npx cdk bootstrap "aws://$ACCOUNT/$REGION" >/dev/null )
+if [ -n "$DOMAIN" ] && [ "$REGION" != "us-east-1" ]; then
+  # CloudFront certs must live in us-east-1, so that region needs bootstrapping too.
+  ( cd infra && npx cdk bootstrap "aws://$ACCOUNT/us-east-1" >/dev/null )
+fi
+
+# In custom-domain mode, issue the cert first (us-east-1) and feed its ARN to the
+# main stack. The cert validates against the Route 53 zone; the preflight above
+# already confirmed delegation, so this shouldn't stall.
+if [ -n "$DOMAIN" ]; then
+  bold "▶ Issuing the TLS certificate for $DOMAIN (us-east-1, DNS-validated)…"
+  ( cd infra && npx cdk deploy TomorrowStoriesCert --require-approval never --outputs-file cert-outputs.json )
+  CERT_ARN=$(node -e "console.log(require('./infra/cert-outputs.json').TomorrowStoriesCert.CertificateArn)")
+  export CERT_ARN
+  bold "  Certificate ready: $CERT_ARN"
+fi
 
 bold "▶ Deploying cloud infrastructure (this is the long step)…"
-( cd infra && npx cdk deploy --require-approval never --outputs-file cdk-outputs.json )
+( cd infra && npx cdk deploy TomorrowStories --require-approval never --outputs-file cdk-outputs.json )
 
 # ---- read stack outputs ------------------------------------------------------
 OUTS="infra/cdk-outputs.json"
@@ -142,6 +210,9 @@ if [ -n "${CLERK_SECRET_KEY:-}" ]; then
 else
   echo "   Organizer auth:               OFF (open mode — legacy admin password below)"
   echo "   Admin password:               $ADMIN_KEY"
+fi
+if [ -n "$DOMAIN" ]; then
+  echo "   Custom domain:                $DOMAIN + www.$DOMAIN  (Route 53 alias → CloudFront, ACM TLS)"
 fi
 echo "   Transcode mode:               ${TRANSCODE}  (sticky — saved in ./.transcode-mode; set TRANSCODE=on|off to change)"
 echo "   (Secrets saved in ./.admin-key and ./.clerk-env — keep them private.)"

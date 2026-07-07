@@ -19,6 +19,9 @@ import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
+import * as acm from "aws-cdk-lib/aws-certificatemanager";
+import * as route53 from "aws-cdk-lib/aws-route53";
+import * as route53Targets from "aws-cdk-lib/aws-route53-targets";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 
 const repoRoot = path.join(__dirname, "..", "..");
@@ -26,9 +29,26 @@ const backendDir = path.join(repoRoot, "backend");
 const backendSrc = path.join(backendDir, "src");
 const backendLock = path.join(backendDir, "package-lock.json");
 
+export interface TomorrowStoriesStackProps extends StackProps {
+  /** Apex domain (e.g. "tomorrowstories.net"); empty = default CloudFront domain. */
+  domainName?: string;
+  /** Route 53 hosted zone id for the apex domain (required with domainName). */
+  hostedZoneId?: string;
+  /** us-east-1 ACM cert ARN covering apex + www (required with domainName). */
+  certificateArn?: string;
+}
+
 export class TomorrowStoriesStack extends Stack {
-  constructor(scope: Construct, id: string, props?: StackProps) {
+  constructor(scope: Construct, id: string, props?: TomorrowStoriesStackProps) {
     super(scope, id, props);
+
+    // Custom-domain mode is active only when the domain, its hosted zone, and a
+    // cert are all supplied together; otherwise fall back to *.cloudfront.net.
+    const domainName = props?.domainName || "";
+    const hostedZoneId = props?.hostedZoneId || "";
+    const certificateArn = props?.certificateArn || "";
+    const customDomain = !!(domainName && hostedZoneId && certificateArn);
+    const domainAliases = customDomain ? [domainName, `www.${domainName}`] : [];
 
     // ---------------------------------------------------------------- storage
     const table = new dynamodb.Table(this, "Table", {
@@ -102,7 +122,13 @@ export class TomorrowStoriesStack extends Stack {
     // ------------------------------------------------------------- CloudFront
     // default -> SPA, /media/* -> processed videos. One domain fronts both, so
     // SITE_BASE_URL and MEDIA_BASE_URL are the same origin.
+    const certificate = customDomain
+      ? acm.Certificate.fromCertificateArn(this, "SiteCert", certificateArn)
+      : undefined;
     const distribution = new cloudfront.Distribution(this, "Cdn", {
+      // In custom-domain mode CloudFront also answers on the apex + www; the ACM
+      // cert (us-east-1) covers both. Without it, only the default domain.
+      ...(customDomain ? { domainNames: domainAliases, certificate } : {}),
       defaultRootObject: "index.html",
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(webBucket),
@@ -128,7 +154,31 @@ export class TomorrowStoriesStack extends Stack {
       ],
     });
 
-    const siteBaseUrl = `https://${distribution.distributionDomainName}`;
+    // In custom-domain mode the canonical origin is the apex; otherwise the
+    // CloudFront default domain. Both the SPA and Lambdas key off this.
+    const siteBaseUrl = customDomain
+      ? `https://${domainName}`
+      : `https://${distribution.distributionDomainName}`;
+
+    // Point the apex and www at CloudFront via Route 53 alias records (A + AAAA).
+    // Alias records are how an apex can target CloudFront — a plain CNAME can't
+    // sit on the zone root. www gets the same treatment so both serve the app.
+    if (customDomain) {
+      const zone = route53.HostedZone.fromHostedZoneAttributes(this, "Zone", {
+        hostedZoneId,
+        zoneName: domainName,
+      });
+      const target = route53.RecordTarget.fromAlias(
+        new route53Targets.CloudFrontTarget(distribution)
+      );
+      for (const [label, recordName] of [
+        ["Apex", domainName],
+        ["Www", `www.${domainName}`],
+      ] as const) {
+        new route53.ARecord(this, `${label}Alias`, { zone, recordName, target });
+        new route53.AaaaRecord(this, `${label}AliasV6`, { zone, recordName, target });
+      }
+    }
 
     // ---------------------------------------------------- MediaConvert IAM role
     const mediaConvertRole = new iam.Role(this, "MediaConvertRole", {
@@ -169,7 +219,11 @@ export class TomorrowStoriesStack extends Stack {
         TRANSCODE: process.env.TRANSCODE || "on",
         CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY || "",
         SUPER_ADMIN_IDS: process.env.SUPER_ADMIN_IDS || "",
-        CLERK_AUTHORIZED_PARTIES: process.env.CLERK_AUTHORIZED_PARTIES || siteBaseUrl,
+        // Clerk validates the token's azp against these origins. Cover every
+        // host the SPA can be served from (apex + www) in custom-domain mode.
+        CLERK_AUTHORIZED_PARTIES:
+          process.env.CLERK_AUTHORIZED_PARTIES ||
+          (customDomain ? domainAliases.map((d) => `https://${d}`).join(",") : siteBaseUrl),
       },
     });
     table.grantReadWriteData(apiFn);
