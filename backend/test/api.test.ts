@@ -9,6 +9,7 @@ vi.mock("@aws-sdk/s3-presigned-post", () => ({
 }));
 
 import { handler } from "../src/api.js";
+import { hashPassword } from "../src/shared/lock.js";
 
 const ddb = mockClient(DynamoDBDocumentClient);
 const s3 = mockClient(S3Client);
@@ -324,6 +325,119 @@ describe("comments", () => {
     expect(status).toBe(200);
     expect(body.comments).toHaveLength(1);
     expect(body.comments[0].author).toBe("Sam");
+  });
+});
+
+describe("view lock (password-gated wall)", () => {
+  const LOCK = hashPassword("letmein");
+  const LOCKED_EVENT = { ...THEME_EVENT, lock: LOCK };
+
+  it("PATCH viewPassword sets the lock and reports locked=true", async () => {
+    ddb.on(GetCommand).resolves({ Item: THEME_EVENT });
+    ddb.on(UpdateCommand).resolves({ Attributes: { ...THEME_EVENT, lock: LOCK } });
+    const { status, body } = parse(
+      await handler(
+        ev("PATCH", "/events/abc", {
+          path: { eventId: "abc" },
+          headers: { "x-admin-key": "s3cr3t-admin-key" },
+          body: { viewPassword: "letmein" },
+        })
+      )
+    );
+    expect(status).toBe(200);
+    expect(body.locked).toBe(true);
+  });
+
+  it("PATCH rejects a too-short password", async () => {
+    ddb.on(GetCommand).resolves({ Item: THEME_EVENT });
+    const { status } = parse(
+      await handler(
+        ev("PATCH", "/events/abc", {
+          path: { eventId: "abc" },
+          headers: { "x-admin-key": "s3cr3t-admin-key" },
+          body: { viewPassword: "ab" },
+        })
+      )
+    );
+    expect(status).toBe(400);
+  });
+
+  it("blocks GET /events/{id}/videos with 401 locked when no token is sent", async () => {
+    ddb.on(GetCommand).resolves({ Item: LOCKED_EVENT });
+    const { status, body } = parse(
+      await handler(ev("GET", "/events/abc/videos", { path: { eventId: "abc" } }))
+    );
+    expect(status).toBe(401);
+    expect(body.locked).toBe(true);
+  });
+
+  it("blocks GET /events/{id} with 401 locked when no token is sent", async () => {
+    ddb.on(GetCommand).resolves({ Item: LOCKED_EVENT });
+    const { status, body } = parse(
+      await handler(ev("GET", "/events/abc", { path: { eventId: "abc" } }))
+    );
+    expect(status).toBe(401);
+    expect(body.locked).toBe(true);
+  });
+
+  it("the wrong password is rejected with 401", async () => {
+    ddb.on(GetCommand).resolves({ Item: LOCKED_EVENT });
+    const { status } = parse(
+      await handler(ev("POST", "/events/abc/unlock", { path: { eventId: "abc" }, body: { password: "nope" } }))
+    );
+    expect(status).toBe(401);
+  });
+
+  it("unlock returns a token that opens the wall", async () => {
+    ddb.on(GetCommand).resolves({ Item: LOCKED_EVENT });
+    ddb.on(QueryCommand).resolves({ Items: [] }); // listVideos → empty
+
+    const unlockRes = parse(
+      await handler(ev("POST", "/events/abc/unlock", { path: { eventId: "abc" }, body: { password: "letmein" } }))
+    );
+    expect(unlockRes.status).toBe(200);
+    const token = unlockRes.body.token as string;
+    expect(token).toMatch(/^\d+\./);
+
+    const videosRes = parse(
+      await handler(ev("GET", "/events/abc/videos", { path: { eventId: "abc" }, headers: { "x-view-token": token } }))
+    );
+    expect(videosRes.status).toBe(200);
+    expect(Array.isArray(videosRes.body.videos)).toBe(true);
+  });
+
+  it("a stale/garbage token is still refused", async () => {
+    ddb.on(GetCommand).resolves({ Item: LOCKED_EVENT });
+    const { status, body } = parse(
+      await handler(ev("GET", "/events/abc/videos", { path: { eventId: "abc" }, headers: { "x-view-token": "0.deadbeef" } }))
+    );
+    expect(status).toBe(401);
+    expect(body.locked).toBe(true);
+  });
+
+  it("PATCH viewPassword:null removes the lock (re-opens the wall)", async () => {
+    ddb.on(GetCommand).resolves({ Item: LOCKED_EVENT });
+    ddb.on(UpdateCommand).resolves({ Attributes: { ...THEME_EVENT } }); // lock gone
+    const { status, body } = parse(
+      await handler(
+        ev("PATCH", "/events/abc", {
+          path: { eventId: "abc" },
+          headers: { "x-admin-key": "s3cr3t-admin-key" },
+          body: { viewPassword: null },
+        })
+      )
+    );
+    expect(status).toBe(200);
+    expect(body.locked).toBe(false);
+  });
+
+  it("an event with no lock stays open (no token needed)", async () => {
+    ddb.on(GetCommand).resolves({ Item: THEME_EVENT });
+    ddb.on(QueryCommand).resolves({ Items: [] });
+    const { status } = parse(
+      await handler(ev("GET", "/events/abc/videos", { path: { eventId: "abc" } }))
+    );
+    expect(status).toBe(200);
   });
 });
 

@@ -240,15 +240,17 @@ export async function deleteEvent(
 }
 
 /**
- * Patch mutable fields on an event's META item (name / palette / topic buckets).
- * Only provided fields are written. Fails if the event doesn't exist. Returns
- * the full updated item so the caller can DTO it.
+ * Patch mutable fields on an event's META item (name / palette / topic buckets /
+ * view lock). Only provided fields are written. Passing `lock: null` REMOVES the
+ * lock (unlocks the event). Fails if the event doesn't exist. Returns the full
+ * updated item so the caller can DTO it.
  */
 export async function updateEvent(
   eventId: string,
-  patch: { name?: string; palette?: string; themes?: EventItem["themes"] }
+  patch: { name?: string; palette?: string; themes?: EventItem["themes"]; lock?: EventItem["lock"] | null }
 ): Promise<EventItem> {
   const sets: string[] = [];
+  const removes: string[] = [];
   const names: Record<string, string> = {};
   const values: Record<string, unknown> = {};
   if (patch.name !== undefined) {
@@ -264,13 +266,28 @@ export async function updateEvent(
     sets.push("themes = :t");
     values[":t"] = patch.themes;
   }
+  // `lock` is a DynamoDB reserved word → alias it. null clears the lock.
+  if (patch.lock === null) {
+    removes.push("#lk");
+    names["#lk"] = "lock";
+  } else if (patch.lock !== undefined) {
+    sets.push("#lk = :lk");
+    names["#lk"] = "lock";
+    values[":lk"] = patch.lock;
+  }
+  const expr = [
+    sets.length ? "SET " + sets.join(", ") : "",
+    removes.length ? "REMOVE " + removes.join(", ") : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   const res = await doc.send(
     new UpdateCommand({
       TableName: config.tableName,
       Key: { PK: eventPK(eventId), SK: "META" },
-      UpdateExpression: "SET " + sets.join(", "),
+      UpdateExpression: expr,
       ExpressionAttributeNames: Object.keys(names).length ? names : undefined,
-      ExpressionAttributeValues: values,
+      ExpressionAttributeValues: Object.keys(values).length ? values : undefined,
       ConditionExpression: "attribute_exists(PK)",
       ReturnValues: "ALL_NEW",
     })

@@ -51,3 +51,29 @@ describe("demo store", () => {
     expect(all.every((e) => typeof e.attendeeUrl === "string")).toBe(true);
   });
 });
+
+describe("demo store — view lock", () => {
+  it("locks reads once a password is set and unlocks with the right one", () => {
+    const ev = demo.createEvent("Lockable");
+    const updated = demo.updateEvent(ev.eventId, { viewPassword: "pw12" });
+    expect(updated.locked).toBe(true);
+
+    expect(() => demo.listVideos(ev.eventId)).toThrow();
+    demo.unlock(ev.eventId, "pw12");
+    expect(demo.listVideos(ev.eventId).videos.length).toBeGreaterThan(0);
+  });
+
+  it("rejects the wrong password", () => {
+    const ev = demo.createEvent("Lockable2");
+    demo.updateEvent(ev.eventId, { viewPassword: "pw12" });
+    expect(() => demo.unlock(ev.eventId, "nope")).toThrow(/incorrect/i);
+  });
+
+  it("removing the password re-opens the wall", () => {
+    const ev = demo.createEvent("Lockable3");
+    demo.updateEvent(ev.eventId, { viewPassword: "pw12" });
+    demo.updateEvent(ev.eventId, { viewPassword: null });
+    expect(demo.updateEvent(ev.eventId, {}).locked).toBe(false);
+    expect(() => demo.listVideos(ev.eventId)).not.toThrow();
+  });
+});

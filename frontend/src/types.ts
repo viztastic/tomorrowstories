@@ -17,6 +17,7 @@ export interface EventDTO {
   attendeeUrl: string;
   bigScreenUrl: string;
   createdAt: string;
+  locked: boolean; // true when the organizer set a view password (never the password)
   creatorIp?: string; // only present on the admin sessions list
 }
 

@@ -6,6 +6,7 @@ import { api } from "../../api";
 import { ACCENT, BRAND_GRAD, CHIP_ON, CHIP_ON_INK, FONT_DISPLAY, HEADER_BG, INK, MUTED, MUTED2, OVERLAY_BG, PAGE_BG, themeById } from "../../design";
 import { PaletteProvider } from "../../PaletteProvider";
 import { Spinner } from "../common";
+import { LockGate } from "../LockGate";
 import { useEventData } from "../../useEventData";
 import { useMediaQuery } from "../../useMediaQuery";
 import { Wall } from "./Wall";
@@ -82,6 +83,9 @@ export function Attendee({ eventId }: { eventId: string }) {
         <div style={centerBox}><Spinner size={30} /><div style={{ marginTop: 14, color: MUTED }}>Loading the wall…</div></div>
       </Shell>
     );
+  }
+  if (data.locked) {
+    return <LockGate eventId={eventId} onUnlocked={data.refresh} />;
   }
   if (!data.event) {
     return (

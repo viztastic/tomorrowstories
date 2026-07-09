@@ -42,6 +42,10 @@ export interface EventItem {
   GSI1SK?: string; // <createdAt>#<eventId>
   createdAt: string;
   creatorIp?: string; // source IP that created the event (admin-only)
+  // Post-event access lock. When set, viewing the wall (big screen + attendee
+  // link) requires the organizer's password. Absent = open. Never sent to the
+  // client — only the derived `locked` boolean is (see eventToDTO).
+  lock?: { salt: string; hash: string };
 }
 
 /** DynamoDB item for a video. PK=EVENT#<id>, SK=VIDEO#<videoId> */
@@ -85,6 +89,7 @@ export interface EventDTO {
   attendeeUrl: string;
   bigScreenUrl: string;
   createdAt: string;
+  locked: boolean; // true when a view password is set (never the password itself)
   creatorIp?: string; // only populated on the admin sessions list
 }
 

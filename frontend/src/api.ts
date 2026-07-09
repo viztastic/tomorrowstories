@@ -1,12 +1,35 @@
 import { DEMO, getApiUrl } from "./config";
 import { demo } from "./demo";
+import { LockedError } from "./errors";
 import type { CommentDTO, EventDTO, Theme, VideoDTO } from "./types";
+
+export { LockedError } from "./errors";
 
 /** Organizer-editable event settings (create options + PATCH body). */
 export interface EventSettings {
   name?: string;
   palette?: string;
   themes?: Theme[];
+  /** Post-event view password. A non-empty string locks the wall; null/"" unlocks it. */
+  viewPassword?: string | null;
+}
+
+// A viewer who entered a locked wall's password gets a view token; we stash it
+// per-event in sessionStorage (cleared when the tab closes → re-prompt next
+// session, which is the privacy-appropriate default) and ride it on the reads.
+const viewKey = (eventId: string) => `ts-view:${eventId}`;
+export function saveViewToken(eventId: string, token: string) {
+  try { sessionStorage.setItem(viewKey(eventId), token); } catch { /* storage disabled */ }
+}
+export function getViewToken(eventId: string): string | null {
+  try { return sessionStorage.getItem(viewKey(eventId)); } catch { return null; }
+}
+export function clearViewToken(eventId: string) {
+  try { sessionStorage.removeItem(viewKey(eventId)); } catch { /* storage disabled */ }
+}
+function viewHeaders(eventId: string): Record<string, string> {
+  const t = getViewToken(eventId);
+  return t ? { "x-view-token": t } : {};
 }
 
 export interface PresignedPost {
@@ -44,6 +67,9 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    // A locked wall (401 + locked flag) is a distinct, expected signal — surface
+    // it as a typed error so callers show the unlock prompt, not a red error.
+    if (res.status === 401 && (body as { locked?: boolean }).locked) throw new LockedError();
     throw new Error((body as { error?: string }).error || `Request failed (${res.status})`);
   }
   return res.json() as Promise<T>;
@@ -71,7 +97,15 @@ export const api = {
 
   async getEvent(eventId: string): Promise<EventDTO> {
     if (DEMO || !(await getApiUrl())) return demo.getEvent(eventId);
-    return req<EventDTO>(`/events/${eventId}`);
+    return req<EventDTO>(`/events/${eventId}`, { headers: viewHeaders(eventId) });
+  },
+
+  /** Exchange a locked wall's password for a view token (persisted on success). */
+  async unlock(eventId: string, password: string): Promise<void> {
+    const token = DEMO || !(await getApiUrl())
+      ? demo.unlock(eventId, password)
+      : (await req<{ token: string }>(`/events/${eventId}/unlock`, { method: "POST", body: JSON.stringify({ password }) })).token;
+    if (token) saveViewToken(eventId, token);
   },
 
   /** Resolve a short event code (e.g. "NWM08S") to its eventId. */
@@ -90,7 +124,7 @@ export const api = {
 
   async listVideos(eventId: string): Promise<{ event: EventDTO; videos: VideoDTO[] }> {
     if (DEMO || !(await getApiUrl())) return demo.listVideos(eventId);
-    return req<{ event: EventDTO; videos: VideoDTO[] }>(`/events/${eventId}/videos`);
+    return req<{ event: EventDTO; videos: VideoDTO[] }>(`/events/${eventId}/videos`, { headers: viewHeaders(eventId) });
   },
 
   async like(eventId: string, videoId: string): Promise<number> {

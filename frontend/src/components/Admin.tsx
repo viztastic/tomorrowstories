@@ -192,6 +192,7 @@ function SessionCard({ ev, onDeleted, onUpdated }: { ev: EventDTO; onDeleted: ()
         <LinkRow label="Attendee" url={ev.attendeeUrl} />
         <LinkRow label="Big screen" url={ev.bigScreenUrl} />
       </div>
+      <LockControl ev={ev} onUpdated={onUpdated} />
       {err && <div style={{ ...errBox, marginTop: 12 }}>{err}</div>}
       {editing && (
         <div style={{ marginTop: 14, padding: 14, borderRadius: 14, background: "rgba(var(--ts-neutral-rgb),.03)", border: "1px solid rgba(var(--ts-neutral-rgb),.08)" }}>
@@ -228,6 +229,97 @@ function SessionCard({ ev, onDeleted, onUpdated }: { ev: EventDTO; onDeleted: ()
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Post-event access lock. During the event the organizer leaves it open; once
+ * it's over they set a password so the big screen and attendee link both require
+ * it to view the recorded stories. Setting/removing goes through the same
+ * ownership-guarded PATCH as palette/topics.
+ */
+function LockControl({ ev, onUpdated }: { ev: EventDTO; onUpdated: (ev: EventDTO) => void }) {
+  const [open, setOpen] = useState(false);
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState<"" | "save" | "remove">("");
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    if (pw.length < 4) { setErr("Use at least 4 characters"); return; }
+    setBusy("save");
+    setErr(null);
+    try {
+      onUpdated(await api.updateEvent(ev.eventId, { viewPassword: pw }));
+      setOpen(false);
+      setPw("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn’t save the password");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function remove() {
+    setBusy("remove");
+    setErr(null);
+    try {
+      onUpdated(await api.updateEvent(ev.eventId, { viewPassword: null }));
+      setOpen(false);
+      setPw("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn’t remove the password");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <div style={lockBox}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span aria-hidden style={{ fontSize: 16 }}>{ev.locked ? "🔒" : "🌐"}</span>
+        <div style={{ flex: 1, minWidth: 150 }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>
+            {ev.locked ? "Password required to view" : "Open — anyone with the link can view"}
+          </div>
+          <div style={{ fontSize: 12, color: MUTED2, marginTop: 2, lineHeight: 1.4 }}>
+            {ev.locked
+              ? "Big screen and attendee link both ask for the password."
+              : "Lock it once the event’s over to keep the stories private."}
+          </div>
+        </div>
+        {!open && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => { setOpen(true); setErr(null); }} style={chip}>
+              {ev.locked ? "Change password" : "Set password"}
+            </button>
+            {ev.locked && (
+              <button onClick={remove} disabled={busy === "remove"} style={chip}>
+                {busy === "remove" ? "Removing…" : "Remove"}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {open && (
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <input
+            type="password"
+            value={pw}
+            onChange={(e) => { setPw(e.target.value); setErr(null); }}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            placeholder="New password (min 4 characters)"
+            autoComplete="new-password"
+            aria-label="New view password"
+            style={{ flex: "1 1 180px", minWidth: 0, background: "rgba(var(--ts-neutral-rgb),.06)", border: "1px solid rgba(var(--ts-neutral-rgb),.12)", borderRadius: 12, padding: "9px 13px", color: INK, fontSize: 13.5, fontFamily: "inherit", outline: "none" }}
+          />
+          <button onClick={save} disabled={busy === "save"} style={{ ...primaryBtn, width: "auto", padding: "9px 16px" }}>
+            {busy === "save" ? "Saving…" : "Save"}
+          </button>
+          <button onClick={() => { setOpen(false); setPw(""); setErr(null); }} disabled={busy === "save"} style={chip}>Cancel</button>
+        </div>
+      )}
+      {err && <div style={{ fontSize: 12.5, color: "#FF7A9C", fontWeight: 600, marginTop: 8 }}>{err}</div>}
     </div>
   );
 }
@@ -283,6 +375,7 @@ const card: CSSProperties = { width: "100%", background: "rgba(var(--ts-neutral-
 const primaryBtn: CSSProperties = { width: "100%", padding: 15, borderRadius: 14, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 15, color: "#fff", background: BRAND_GRAD, display: "flex", alignItems: "center", justifyContent: "center", gap: 9 };
 const chip: CSSProperties = { flex: "none", padding: "7px 12px", borderRadius: 10, border: "1px solid rgba(var(--ts-neutral-rgb),.14)", background: "rgba(var(--ts-neutral-rgb),.05)", color: INK, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };
 const linkRow: CSSProperties = { display: "flex", alignItems: "center", gap: 8, background: "rgba(var(--ts-neutral-rgb),.03)", border: "1px solid rgba(var(--ts-neutral-rgb),.06)", borderRadius: 12, padding: "9px 11px" };
+const lockBox: CSSProperties = { marginTop: 10, background: "rgba(var(--ts-neutral-rgb),.03)", border: "1px solid rgba(var(--ts-neutral-rgb),.06)", borderRadius: 12, padding: "11px 13px" };
 const dangerGhost: CSSProperties = { flex: "none", padding: "7px 14px", borderRadius: 10, border: "1px solid rgba(255,61,87,.4)", background: "transparent", color: "#FF7A9C", fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };
 const dangerBtn: CSSProperties = { flex: "none", padding: "7px 14px", borderRadius: 10, border: "none", background: "#E23558", color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" };
 const errBox: CSSProperties = { marginTop: 14, padding: "10px 13px", borderRadius: 12, background: "rgba(255,61,87,.12)", border: "1px solid rgba(255,61,87,.35)", color: "#FF9DB0", fontSize: 13, fontWeight: 600 };

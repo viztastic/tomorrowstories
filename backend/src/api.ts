@@ -27,6 +27,7 @@ import { newEventCode, newEventId, newVideoId, newCommentId } from "./shared/ids
 import { normalizeThemes } from "./shared/themes.js";
 import { authEnabled, requireOrganizer, requireOwner, isSuperAdmin } from "./shared/auth.js";
 import type { OrganizerIdentity } from "./shared/auth.js";
+import { hashPassword, verifyPassword, mintViewToken, verifyViewToken } from "./shared/lock.js";
 import { limitsFor } from "./shared/plans.js";
 import { eventToDTO, videoToDTO, commentToDTO } from "./shared/dto.js";
 import { badRequest, created, HttpError, json, notFound, ok, serverError } from "./shared/http.js";
@@ -71,7 +72,7 @@ export async function handler(
     if (p.eventId) {
       // GET /events/{eventId}
       if (method === "GET" && !p.videoId && event.rawPath.endsWith(`/events/${p.eventId}`)) {
-        return await getEventRoute(p.eventId);
+        return await getEventRoute(p.eventId, event);
       }
       // DELETE /events/{eventId}  (admin: remove the event + its videos + files)
       if (method === "DELETE" && !p.videoId && event.rawPath.endsWith(`/events/${p.eventId}`)) {
@@ -81,13 +82,17 @@ export async function handler(
       if (method === "PATCH" && !p.videoId && event.rawPath.endsWith(`/events/${p.eventId}`)) {
         return await patchEventRoute(p.eventId, event);
       }
+      // POST /events/{eventId}/unlock  (public: exchange the view password for a token)
+      if (method === "POST" && event.rawPath.endsWith("/unlock")) {
+        return await unlockRoute(p.eventId, event);
+      }
       // POST /events/{eventId}/uploads
       if (method === "POST" && event.rawPath.endsWith("/uploads")) {
         return await createUpload(p.eventId, event);
       }
       // GET /events/{eventId}/videos
       if (method === "GET" && event.rawPath.endsWith("/videos")) {
-        return await listVideosRoute(p.eventId);
+        return await listVideosRoute(p.eventId, event);
       }
       // POST /events/{eventId}/videos/{videoId}/like
       if (method === "POST" && p.videoId && event.rawPath.endsWith("/like")) {
@@ -188,12 +193,25 @@ async function patchEventRoute(
   if (identity) requireOwner(e, identity);
 
   const body = parseBody(event);
-  const patch: { name?: string; palette?: string; themes?: EventItem["themes"] } = {};
+  const patch: { name?: string; palette?: string; themes?: EventItem["themes"]; lock?: EventItem["lock"] | null } = {};
 
   if (body.name !== undefined) {
     const name = String(body.name).trim();
     if (!name) return badRequest("Event name cannot be empty");
     patch.name = name.slice(0, 80);
+  }
+
+  // Post-event access lock. A non-empty string sets/replaces the password;
+  // null or "" removes it (re-opens the wall). Only the hash is ever stored.
+  if (body.viewPassword !== undefined) {
+    if (body.viewPassword === null || body.viewPassword === "") {
+      patch.lock = null;
+    } else {
+      const pw = String(body.viewPassword);
+      if (pw.length < 4) return badRequest("Password must be at least 4 characters");
+      if (pw.length > 128) return badRequest("Password is too long");
+      patch.lock = hashPassword(pw);
+    }
   }
 
   if (body.palette !== undefined) {
@@ -229,6 +247,54 @@ async function joinByCode(code: string): Promise<APIGatewayProxyResultV2> {
   const eventId = await getEventIdByCode(code);
   if (!eventId) return notFound("No event with that code");
   return ok({ eventId });
+}
+
+/**
+ * Public: exchange the view password for a short-lived token. Attendees/viewers
+ * call this when a locked wall turns them away; the token then rides on the wall
+ * poll (x-view-token header). Wrong password → 401 (distinct from the read gate's
+ * `locked` 401 so the client shows "incorrect password", not the prompt again).
+ */
+async function unlockRoute(
+  eventId: string,
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
+  const e = await getEvent(eventId);
+  if (!e) return notFound("Event not found");
+  if (!e.lock) return ok({ token: "" }); // not locked — nothing to unlock
+  const body = parseBody(event);
+  const password = String(body.password ?? "");
+  if (!verifyPassword(password, e.lock)) throw new HttpError(401, "Incorrect password");
+  return ok({ token: mintViewToken(eventId, e.lock) });
+}
+
+/**
+ * View gate for the public content reads (event + video list). Returns a 401
+ * `locked` response when the event has a password and the caller hasn't proved
+ * it; returns null (allow) otherwise. The owning organizer (or a super-admin)
+ * viewing while signed in is always let through on their own event.
+ */
+async function viewGate(
+  e: EventItem,
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2 | null> {
+  if (!e.lock) return null;
+  const headers = event.headers ?? {};
+  // Owner bypass: a signed-in organizer never needs their own password. Only
+  // attempt this when Clerk is live and a Bearer token is actually present, so
+  // a public viewer never triggers the 503 "auth not configured" path.
+  const bearer = headers["authorization"] ?? headers["Authorization"];
+  if (authEnabled() && bearer) {
+    try {
+      const id = await requireOrganizer(event);
+      if ((e.ownerId && e.ownerId === id.userId) || isSuperAdmin(id.userId)) return null;
+    } catch {
+      /* not a valid owner session — fall through to the token check */
+    }
+  }
+  const token = headers["x-view-token"] ?? headers["X-View-Token"] ?? "";
+  if (token && verifyViewToken(e.eventId, e.lock, token)) return null;
+  return json(401, { error: "This wall is locked", locked: true });
 }
 
 /** Shared-secret guard for the organizer console. Throws 404 if disabled, 401 if wrong. */
@@ -307,9 +373,14 @@ async function deletePrefix(bucket: string, prefix: string): Promise<void> {
   } while (token);
 }
 
-async function getEventRoute(eventId: string): Promise<APIGatewayProxyResultV2> {
+async function getEventRoute(
+  eventId: string,
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
   const e = await getEvent(eventId);
   if (!e) return notFound("Event not found");
+  const denied = await viewGate(e, event);
+  if (denied) return denied;
   return ok(eventToDTO(e));
 }
 
@@ -385,9 +456,14 @@ async function createUpload(
   return created({ video: videoToDTO(video), upload: presigned });
 }
 
-async function listVideosRoute(eventId: string): Promise<APIGatewayProxyResultV2> {
+async function listVideosRoute(
+  eventId: string,
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
   const e = await getEvent(eventId);
   if (!e) return notFound("Event not found");
+  const denied = await viewGate(e, event);
+  if (denied) return denied;
   const videos = (await listVideos(eventId)).map(videoToDTO);
   return ok({ event: eventToDTO(e), videos });
 }

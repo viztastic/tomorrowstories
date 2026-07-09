@@ -6,6 +6,7 @@ import { ACCENT, BRAND_GRAD, DANGER, DANGER_INK, FONT_DISPLAY, INK, MUTED, MUTED
 import { PaletteProvider, usePalette } from "../../PaletteProvider";
 import { Grain, Qr, Spinner } from "../common";
 import { Thumb, VideoCard } from "../attendee/VideoCard";
+import { LockGate } from "../LockGate";
 import { useEventData } from "../../useEventData";
 import { useMediaQuery } from "../../useMediaQuery";
 
@@ -62,6 +63,9 @@ export function BigScreen({ eventId }: { eventId: string }) {
 
   if (data.loading && !data.event) {
     return <div style={canvasCenter}><Spinner size={34} /></div>;
+  }
+  if (data.locked) {
+    return <LockGate eventId={eventId} onUnlocked={data.refresh} />;
   }
   if (!data.event) {
     return (

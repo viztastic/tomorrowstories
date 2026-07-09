@@ -288,7 +288,7 @@ export class TomorrowStoriesStack extends Stack {
       corsPreflight: {
         allowOrigins: ["*"],
         allowMethods: [apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.PATCH, apigw.CorsHttpMethod.DELETE, apigw.CorsHttpMethod.OPTIONS],
-        allowHeaders: ["content-type", "x-admin-key", "authorization"],
+        allowHeaders: ["content-type", "x-admin-key", "authorization", "x-view-token"],
       },
     });
     const integration = new HttpLambdaIntegration("ApiIntegration", apiFn);
@@ -300,6 +300,7 @@ export class TomorrowStoriesStack extends Stack {
       [apigw.HttpMethod.GET, "/events/{eventId}"],
       [apigw.HttpMethod.DELETE, "/events/{eventId}"],
       [apigw.HttpMethod.PATCH, "/events/{eventId}"],
+      [apigw.HttpMethod.POST, "/events/{eventId}/unlock"],
       [apigw.HttpMethod.POST, "/events/{eventId}/uploads"],
       [apigw.HttpMethod.GET, "/events/{eventId}/videos"],
       [apigw.HttpMethod.POST, "/events/{eventId}/videos/{videoId}/like"],

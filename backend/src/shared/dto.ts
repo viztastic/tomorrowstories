@@ -13,6 +13,8 @@ export function eventToDTO(e: EventItem, opts: { admin?: boolean } = {}): EventD
     attendeeUrl: `${config.siteBaseUrl}/e/${e.eventId}`,
     bigScreenUrl: `${config.siteBaseUrl}/e/${e.eventId}/big`,
     createdAt: e.createdAt,
+    // Only the fact that a password exists is exposed — never the salt/hash.
+    locked: !!e.lock,
     // Creator IP is PII-ish — only surface it on the admin console, never to attendees.
     ...(opts.admin && e.creatorIp ? { creatorIp: e.creatorIp } : {}),
   };

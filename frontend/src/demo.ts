@@ -4,14 +4,23 @@
 import type { CommentDTO, EventDTO, Theme, VideoDTO } from "./types";
 import { THEMES } from "./design";
 import { DEFAULT_PALETTE_ID } from "./palettes";
+import { LockedError } from "./errors";
 
 interface DemoEvent {
   event: EventDTO;
   videos: VideoDTO[];
   comments: CommentDTO[];
+  password?: string; // plaintext is fine — demo store is in-memory only
 }
 
 const store = new Map<string, DemoEvent>();
+// Events unlocked for this browser session (mirrors the real view-token flow).
+const unlocked = new Set<string>();
+
+/** Throw the same locked signal a real 401 would, unless unlocked this session. */
+function gate(e: DemoEvent): void {
+  if (e.password && !unlocked.has(e.event.eventId)) throw new LockedError();
+}
 
 const SEED: Omit<VideoDTO, "status" | "mediaUrl" | "posterUrl">[] = [
   { id: "1", theme: "human", author: "Maya Chen", title: "Teaching my grandma to talk to AI", durationSec: 52, likes: 2140, createdAt: "2026-07-01T13:58:00Z" },
@@ -52,6 +61,7 @@ function makeEvent(eventId: string, name: string, opts: { palette?: string; them
     attendeeUrl: `${location.origin}/e/${eventId}`,
     bigScreenUrl: `${location.origin}/e/${eventId}/big`,
     createdAt: new Date().toISOString(),
+    locked: false,
   };
   return { event, videos: seedVideos(), comments: [] };
 }
@@ -72,15 +82,33 @@ export const demo = {
     store.set(eventId, e);
     return e.event;
   },
-  updateEvent(eventId: string, patch: { name?: string; palette?: string; themes?: Theme[] }): EventDTO {
+  updateEvent(eventId: string, patch: { name?: string; palette?: string; themes?: Theme[]; viewPassword?: string | null }): EventDTO {
     const e = ensure(eventId);
     if (patch.name !== undefined) e.event.name = patch.name;
     if (patch.palette !== undefined) e.event.palette = patch.palette;
     if (patch.themes !== undefined) e.event.themes = patch.themes;
+    if (patch.viewPassword !== undefined) {
+      if (patch.viewPassword === null || patch.viewPassword === "") {
+        e.password = undefined;
+        unlocked.delete(eventId);
+      } else {
+        e.password = patch.viewPassword;
+      }
+      e.event.locked = !!e.password;
+    }
     return e.event;
   },
+  /** Verify a locked event's password; returns a placeholder token on success. */
+  unlock(eventId: string, password: string): string {
+    const e = ensure(eventId);
+    if (e.password && password !== e.password) throw new Error("Incorrect password");
+    unlocked.add(eventId);
+    return "demo-view-token";
+  },
   getEvent(eventId: string): EventDTO {
-    return ensure(eventId).event;
+    const e = ensure(eventId);
+    gate(e);
+    return e.event;
   },
   resolveCode(code: string): string {
     const up = code.toUpperCase();
@@ -93,6 +121,7 @@ export const demo = {
   },
   listVideos(eventId: string): { event: EventDTO; videos: VideoDTO[] } {
     const e = ensure(eventId);
+    gate(e);
     return { event: e.event, videos: e.videos };
   },
   addVideo(eventId: string, meta: { title: string; theme: string; author: string; durationSec: number }): VideoDTO {
