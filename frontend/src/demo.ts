@@ -133,4 +133,12 @@ export const demo = {
   deleteEvent(eventId: string): void {
     store.delete(eventId);
   },
+  deleteVideos(eventId: string, videoIds: string[]): number {
+    const e = ensure(eventId);
+    const remove = new Set(videoIds);
+    const before = e.videos.length;
+    e.videos = e.videos.filter((v) => !remove.has(v.id));
+    e.comments = e.comments.filter((c) => !remove.has(c.videoId));
+    return before - e.videos.length;
+  },
 };
