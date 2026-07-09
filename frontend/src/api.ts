@@ -173,6 +173,25 @@ export const api = {
     await req<{ deleted: boolean }>(`/events/${eventId}`, { method: "DELETE" });
   },
 
+  /** Organizer: delete a single story (metadata + file) (Bearer session). */
+  async deleteVideo(eventId: string, videoId: string): Promise<void> {
+    if (DEMO || !(await getApiUrl())) {
+      demo.deleteVideos(eventId, [videoId]);
+      return;
+    }
+    await req<{ deleted: number }>(`/events/${eventId}/videos/${videoId}`, { method: "DELETE" });
+  },
+
+  /** Organizer: bulk-delete the selected stories. Returns how many were removed. */
+  async deleteVideos(eventId: string, videoIds: string[]): Promise<number> {
+    if (DEMO || !(await getApiUrl())) return demo.deleteVideos(eventId, videoIds);
+    const r = await req<{ deleted: number }>(`/events/${eventId}/videos/delete`, {
+      method: "POST",
+      body: JSON.stringify({ videoIds }),
+    });
+    return r.deleted;
+  },
+
   /**
    * Full upload: create the video record + presigned POST, then PUT the file to
    * S3. In demo mode it just registers the clip locally. Returns the new video.

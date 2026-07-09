@@ -5,11 +5,13 @@ cdk.out/
 .env.local
 *.log
 .DS_Store
-# Local secrets / deploy state — never commit
-.admin-key
-.transcode-mode
-.clerk-env
-.domain
-infra/cert-outputs.json
+# Local secrets / deploy state — never commit (per-env variants: .clerk-env.dev …)
+.admin-key*
+.transcode-mode*
+.clerk-env*
+.domain*
+infra/cert-outputs*.json
+# Non-prod stack outputs (prod's infra/cdk-outputs.json stays tracked)
+infra/cdk-outputs.*.json
 # Build artifacts
 *.tsbuildinfo
