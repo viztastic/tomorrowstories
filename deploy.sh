@@ -27,14 +27,45 @@ REGION=$(aws configure get region || echo "ap-southeast-2")  # default: Sydney
 export AWS_DEFAULT_REGION="$REGION"
 bold "  Using AWS account $ACCOUNT in region $REGION"
 
+# ---- environment / stage -----------------------------------------------------
+# TS_ENV=prod (default) is the live stack: original unsuffixed stack id and state
+# filenames, so behaviour is byte-identical when TS_ENV is unset. TS_ENV=dev (or
+# any other value) stands up a fully isolated parallel stack — its own DynamoDB,
+# buckets, CloudFront, API, Lambdas and its OWN sticky state/output files — so a
+# dev deploy can never read or clobber prod's keys, domain, or outputs. Only the
+# AWS account, region, and CDK bootstrap are shared.
+#   Usage:  ./deploy.sh            # prod
+#           TS_ENV=dev ./deploy.sh # isolated dev stack
+# (TS_ENV, not the POSIX-reserved `ENV`, so an inherited ENV can't fork prod.)
+TS_ENV="${TS_ENV:-prod}"
+TS_ENV=$(printf '%s' "$TS_ENV" | tr '[:upper:]' '[:lower:]')
+export TS_ENV                        # consumed by infra/bin/app.ts to suffix stack ids
+if [ "$TS_ENV" = "prod" ]; then FSUFFIX=""; SSUFFIX=""; else FSUFFIX=".$TS_ENV"; SSUFFIX="-$TS_ENV"; fi
+STACK_ID="TomorrowStories$SSUFFIX"
+CERT_STACK_ID="TomorrowStoriesCert$SSUFFIX"
+# A non-prod stage must never inherit prod's ambient secrets/domain from the
+# shell (e.g. a leftover `source ./.clerk-env` or exported DOMAIN): scrub them so
+# ONLY the per-env sticky files below are honored. Prod is deliberately left
+# untouched, preserving its documented "pass keys via env on first run" flow.
+if [ "$TS_ENV" != "prod" ]; then
+  unset CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY SUPER_ADMIN_IDS DOMAIN
+fi
+ADMIN_FILE=".admin-key$FSUFFIX"
+CLERK_FILE=".clerk-env$FSUFFIX"
+TRANSCODE_FILE=".transcode-mode$FSUFFIX"
+DOMAIN_FILE=".domain$FSUFFIX"
+OUTS="infra/cdk-outputs$FSUFFIX.json"
+CERT_OUTS="infra/cert-outputs$FSUFFIX.json"
+bold "  Environment: $TS_ENV  (stack $STACK_ID)"
+
 # Admin-console password: generated once, persisted locally (.admin-key is
 # gitignored) so it stays stable across redeploys.
-if [ -f .admin-key ]; then
-  ADMIN_KEY=$(cat .admin-key)
+if [ -f "$ADMIN_FILE" ]; then
+  ADMIN_KEY=$(cat "$ADMIN_FILE")
 else
   ADMIN_KEY=$(node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))")
-  echo "$ADMIN_KEY" > .admin-key
-  bold "  Generated an admin password → saved to ./.admin-key"
+  echo "$ADMIN_KEY" > "$ADMIN_FILE"
+  bold "  Generated an admin password → saved to ./$ADMIN_FILE"
 fi
 export ADMIN_PASSWORD="$ADMIN_KEY"
 
@@ -49,8 +80,8 @@ export ADMIN_PASSWORD="$ADMIN_KEY"
 # hanging on "Processing…" forever.
 if [ -n "${TRANSCODE:-}" ]; then
   TRANSCODE=$(printf '%s' "$TRANSCODE" | tr '[:upper:]' '[:lower:]')
-elif [ -f .transcode-mode ]; then
-  TRANSCODE=$(tr -d '[:space:]' < .transcode-mode | tr '[:upper:]' '[:lower:]')
+elif [ -f "$TRANSCODE_FILE" ]; then
+  TRANSCODE=$(tr -d '[:space:]' < "$TRANSCODE_FILE" | tr '[:upper:]' '[:lower:]')
 else
   TRANSCODE=on
 fi
@@ -65,24 +96,24 @@ else
   TRANSCODE=off
 fi
 export TRANSCODE
-printf '%s\n' "$TRANSCODE" > .transcode-mode
+printf '%s\n' "$TRANSCODE" > "$TRANSCODE_FILE"
 
 # Clerk organizer auth (optional, sticky). Provide keys via env or ./.clerk-env
 # (gitignored). With both keys set, organizer sign-in is enabled; without them
 # the app deploys in OPEN mode (no sign-in — anyone can create/manage events).
 # See CLERK_SETUP.md for how to get the keys and configure sign-in methods.
-if [ -f .clerk-env ]; then
+if [ -f "$CLERK_FILE" ]; then
   # shellcheck disable=SC1091
-  source ./.clerk-env
+  source "./$CLERK_FILE"
 fi
 if [ -n "${CLERK_SECRET_KEY:-}" ] && [ -n "${CLERK_PUBLISHABLE_KEY:-}" ]; then
   {
     printf 'export CLERK_PUBLISHABLE_KEY=%q\n' "$CLERK_PUBLISHABLE_KEY"
     printf 'export CLERK_SECRET_KEY=%q\n' "$CLERK_SECRET_KEY"
     printf 'export SUPER_ADMIN_IDS=%q\n' "${SUPER_ADMIN_IDS:-}"
-  } > .clerk-env
+  } > "$CLERK_FILE"
   export CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY SUPER_ADMIN_IDS
-  bold "  Organizer auth: ON (Clerk keys loaded from ./.clerk-env)."
+  bold "  Organizer auth: ON (Clerk keys loaded from ./$CLERK_FILE)."
 else
   printf "\033[33m%s\033[0m\n" "  ⚠ Clerk keys not set — deploying in OPEN mode (no organizer sign-in)."
   printf "\033[33m%s\033[0m\n" "    Set CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY (see CLERK_SETUP.md) and re-run to enable."
@@ -94,9 +125,9 @@ fi
 # domain whose nameservers the registrar already delegates to (see DEPLOY.md).
 if [ -n "${DOMAIN:-}" ]; then
   DOMAIN=$(printf '%s' "$DOMAIN" | tr '[:upper:]' '[:lower:]')
-  printf '%s\n' "$DOMAIN" > .domain
-elif [ -f .domain ]; then
-  DOMAIN=$(tr -d '[:space:]' < .domain | tr '[:upper:]' '[:lower:]')
+  printf '%s\n' "$DOMAIN" > "$DOMAIN_FILE"
+elif [ -f "$DOMAIN_FILE" ]; then
+  DOMAIN=$(tr -d '[:space:]' < "$DOMAIN_FILE" | tr '[:upper:]' '[:lower:]')
 else
   DOMAIN=""
 fi
@@ -161,18 +192,17 @@ fi
 # already confirmed delegation, so this shouldn't stall.
 if [ -n "$DOMAIN" ]; then
   bold "▶ Issuing the TLS certificate for $DOMAIN (us-east-1, DNS-validated)…"
-  ( cd infra && npx cdk deploy TomorrowStoriesCert --require-approval never --outputs-file cert-outputs.json )
-  CERT_ARN=$(node -e "console.log(require('./infra/cert-outputs.json').TomorrowStoriesCert.CertificateArn)")
+  ( cd infra && npx cdk deploy "$CERT_STACK_ID" --require-approval never --outputs-file "cert-outputs$FSUFFIX.json" )
+  CERT_ARN=$(node -e "console.log(require('./$CERT_OUTS')['$CERT_STACK_ID'].CertificateArn)")
   export CERT_ARN
   bold "  Certificate ready: $CERT_ARN"
 fi
 
 bold "▶ Deploying cloud infrastructure (this is the long step)…"
-( cd infra && npx cdk deploy TomorrowStories --require-approval never --outputs-file cdk-outputs.json )
+( cd infra && npx cdk deploy "$STACK_ID" --require-approval never --outputs-file "cdk-outputs$FSUFFIX.json" )
 
 # ---- read stack outputs ------------------------------------------------------
-OUTS="infra/cdk-outputs.json"
-read_out() { node -e "console.log(require('./$OUTS').TomorrowStories.$1)"; }
+read_out() { node -e "console.log(require('./$OUTS')['$STACK_ID'].$1)"; }
 WEB_BUCKET=$(read_out WebBucketName)
 DIST_ID=$(read_out DistributionId)
 SITE_URL=$(read_out SiteUrl)
@@ -203,6 +233,7 @@ aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*" >/d
 # ---- done --------------------------------------------------------------------
 echo
 bold "✅ Deployed!"
+echo "   Environment:                  $TS_ENV  (stack $STACK_ID)"
 echo "   Organizer / create an event:  $SITE_URL"
 echo "   Organizer dashboard:          $SITE_URL/admin"
 if [ -n "${CLERK_SECRET_KEY:-}" ]; then
@@ -214,8 +245,11 @@ fi
 if [ -n "$DOMAIN" ]; then
   echo "   Custom domain:                $DOMAIN + www.$DOMAIN  (Route 53 alias → CloudFront, ACM TLS)"
 fi
-echo "   Transcode mode:               ${TRANSCODE}  (sticky — saved in ./.transcode-mode; set TRANSCODE=on|off to change)"
-echo "   (Secrets saved in ./.admin-key and ./.clerk-env — keep them private.)"
+echo "   Transcode mode:               ${TRANSCODE}  (sticky — saved in ./$TRANSCODE_FILE; set TRANSCODE=on|off to change)"
+echo "   (Secrets saved in ./$ADMIN_FILE and ./$CLERK_FILE — keep them private.)"
+if [ "$TS_ENV" != "prod" ]; then
+  echo "   Tear down this env:           ( cd infra && TS_ENV=$TS_ENV npx cdk destroy $STACK_ID )"
+fi
 echo "   (Create an event → it opens the big screen with a live QR code.)"
 echo
 echo "   The QR on the big screen now points at the real site, so phones can scan"
