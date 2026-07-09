@@ -75,7 +75,7 @@ export function BigScreen({ eventId }: { eventId: string }) {
   }
 
   return (
-    <PaletteProvider paletteId={data.event.palette}>
+    <PaletteProvider paletteId={data.event.palette} custom={data.event.customPalette}>
       {isWide ? (
         <Projector event={data.event} live={live} trending={trending} />
       ) : (
@@ -488,6 +488,16 @@ function FocusModal({ video, theme, onClose }: { video: VideoDTO; theme: Theme; 
   );
 }
 
+/** #rgb / #rrggbb → rgba() at the given alpha. Falls back to a mid grey on junk so
+ *  a bad custom colour never blanks the label. */
+function withAlpha(hex: string, alpha: number): string {
+  let h = (hex || "").trim().replace(/^#/, "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return `rgba(136,136,136,${alpha})`;
+  const n = parseInt(h, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
 /** Decorative gradient panel that keeps the canvas full when there are few clips. */
 function PlaceholderCard({ pair }: { pair: [string, string] }) {
   return (
@@ -547,10 +557,11 @@ function CredentialBlock({
 function EventCode({ code, size, align = "left", onColor }: { code: string; size: number; align?: "left" | "center"; onColor?: string }) {
   const host = typeof window !== "undefined" ? window.location.host : "";
   const codeColor = onColor ?? INK;
-  // On a saturated card the muted labels read as translucent white; qrPanelInk is
-  // white for the only palette that sets it, so white-alpha is the right derive.
-  const labelColor = onColor ? "rgba(255,255,255,.72)" : MUTED2;
-  const subColor = onColor ? "rgba(255,255,255,.82)" : MUTED;
+  // On a solid QR card the muted labels are the card's ink at reduced alpha. Deriving
+  // from qrPanelInk (not assuming white) keeps them legible on a LIGHT card too — a
+  // custom yellow card gets dark labels, Beacon's red card keeps white ones.
+  const labelColor = onColor ? withAlpha(onColor, 0.72) : MUTED2;
+  const subColor = onColor ? withAlpha(onColor, 0.82) : MUTED;
   return (
     <div style={{ textAlign: align }}>
       <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".16em", color: labelColor }}>OR ENTER CODE</div>
@@ -601,7 +612,10 @@ function BigCard({ video, theme, autoPlay, onOpen }: { video: VideoDTO; theme: T
 const tableRow: CSSProperties = { display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "10px 14px", borderRadius: 14, border: "1px solid rgba(var(--ts-neutral-rgb),.07)", background: "rgba(var(--ts-neutral-rgb),.03)", cursor: "pointer", fontFamily: "inherit", color: INK };
 // Fades the marquee's cropped edges so cards dissolve at the top/bottom of the wall.
 const wallMask = "linear-gradient(180deg,transparent,#000 6%,#000 94%,transparent)";
-const canvasBg = PAGE_BG;
+// A custom palette can paint an uploaded wallpaper behind everything: the
+// --ts-wallpaper layer ("none" for the named palettes, so they render exactly as
+// before) sits over the flat page background as a fallback.
+const canvasBg = `var(--ts-wallpaper), ${PAGE_BG}`;
 const canvasCenter: CSSProperties = { minHeight: "100vh", background: canvasBg, color: INK, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 };
 const mobileCanvas: CSSProperties = {
   minHeight: "100vh",

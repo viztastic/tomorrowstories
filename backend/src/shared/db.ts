@@ -246,9 +246,17 @@ export async function deleteEvent(
  */
 export async function updateEvent(
   eventId: string,
-  patch: { name?: string; palette?: string; themes?: EventItem["themes"] }
+  // customPalette: an object sets it; `null` removes it (event reverts to a
+  // named palette); undefined leaves it untouched.
+  patch: {
+    name?: string;
+    palette?: string;
+    themes?: EventItem["themes"];
+    customPalette?: EventItem["customPalette"] | null;
+  }
 ): Promise<EventItem> {
   const sets: string[] = [];
+  const removes: string[] = [];
   const names: Record<string, string> = {};
   const values: Record<string, unknown> = {};
   if (patch.name !== undefined) {
@@ -264,13 +272,22 @@ export async function updateEvent(
     sets.push("themes = :t");
     values[":t"] = patch.themes;
   }
+  if (patch.customPalette === null) {
+    removes.push("customPalette");
+  } else if (patch.customPalette !== undefined) {
+    sets.push("customPalette = :cp");
+    values[":cp"] = patch.customPalette;
+  }
+  const clauses = [sets.length ? "SET " + sets.join(", ") : "", removes.length ? "REMOVE " + removes.join(", ") : ""]
+    .filter(Boolean)
+    .join(" ");
   const res = await doc.send(
     new UpdateCommand({
       TableName: config.tableName,
       Key: { PK: eventPK(eventId), SK: "META" },
-      UpdateExpression: "SET " + sets.join(", "),
+      UpdateExpression: clauses,
       ExpressionAttributeNames: Object.keys(names).length ? names : undefined,
-      ExpressionAttributeValues: values,
+      ExpressionAttributeValues: Object.keys(values).length ? values : undefined,
       ConditionExpression: "attribute_exists(PK)",
       ReturnValues: "ALL_NEW",
     })

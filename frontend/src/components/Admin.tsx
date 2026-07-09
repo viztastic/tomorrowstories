@@ -6,9 +6,11 @@ import { ACCENT, BRAND_GRAD, CHIP_ON, CHIP_ON_INK, FONT_DISPLAY, INK, MUTED, MUT
 import { Spinner } from "./common";
 import { OrganizerButton } from "../auth";
 import { PalettePicker } from "./organizer/PalettePicker";
+import { CustomPaletteEditor } from "./organizer/CustomPaletteEditor";
 import { TopicEditor } from "./organizer/TopicEditor";
+import { CUSTOM_PALETTE_ID, DEFAULT_CUSTOM_INPUT } from "../customPalette";
 import { buildArchive, slug } from "../export";
-import type { EventDTO, Theme } from "../types";
+import type { CustomPalette, EventDTO, Theme } from "../types";
 
 /** Organizer dashboard — lists the events you own (route is sign-in gated). */
 export function Admin() {
@@ -111,10 +113,15 @@ function SessionCard({ ev, onDeleted, onUpdated }: { ev: EventDTO; onDeleted: ()
   const [editing, setEditing] = useState(false);
   const [draftPalette, setDraftPalette] = useState(ev.palette);
   const [draftThemes, setDraftThemes] = useState<Theme[]>(ev.themes);
+  // The custom-palette draft, kept alongside the named-palette id. Preserved when
+  // the organizer toggles between "Custom" and a named skin so they don't lose
+  // their colours by mis-clicking.
+  const [draftCustom, setDraftCustom] = useState<CustomPalette>(ev.customPalette ?? DEFAULT_CUSTOM_INPUT);
 
   function openEdit() {
     setDraftPalette(ev.palette);
     setDraftThemes(ev.themes);
+    setDraftCustom(ev.customPalette ?? DEFAULT_CUSTOM_INPUT);
     setErr(null);
     setEditing(true);
   }
@@ -123,7 +130,13 @@ function SessionCard({ ev, onDeleted, onUpdated }: { ev: EventDTO; onDeleted: ()
     setBusy("save");
     setErr(null);
     try {
-      const updated = await api.updateEvent(ev.eventId, { palette: draftPalette, themes: draftThemes });
+      const custom = draftPalette === CUSTOM_PALETTE_ID;
+      const updated = await api.updateEvent(ev.eventId, {
+        palette: draftPalette,
+        themes: draftThemes,
+        // Send the custom skin when selected; null clears it back to a named one.
+        customPalette: custom ? draftCustom : null,
+      });
       onUpdated(updated);
       setEditing(false);
     } catch (e) {
@@ -197,6 +210,11 @@ function SessionCard({ ev, onDeleted, onUpdated }: { ev: EventDTO; onDeleted: ()
         <div style={{ marginTop: 14, padding: 14, borderRadius: 14, background: "rgba(var(--ts-neutral-rgb),.03)", border: "1px solid rgba(var(--ts-neutral-rgb),.08)" }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".07em", color: MUTED2, marginBottom: 10 }}>WALL & APP THEME</div>
           <PalettePicker value={draftPalette} onChange={setDraftPalette} />
+          {draftPalette === CUSTOM_PALETTE_ID && (
+            <div style={{ marginTop: 14 }}>
+              <CustomPaletteEditor eventId={ev.eventId} value={draftCustom} onChange={setDraftCustom} />
+            </div>
+          )}
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".07em", color: MUTED2, margin: "18px 0 10px" }}>TOPICS ATTENDEES CAN PICK</div>
           <TopicEditor themes={draftThemes} onChange={setDraftThemes} />
           <div style={{ display: "flex", gap: 8, marginTop: 14 }}>

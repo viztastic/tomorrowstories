@@ -1,7 +1,7 @@
 // In-memory "backend" for demo mode (VITE_DEMO=1 or no /config.json). Lets the
 // whole app run with no AWS — mirrors the seeded feel of the original prototype.
 
-import type { CommentDTO, EventDTO, Theme, VideoDTO } from "./types";
+import type { CommentDTO, CustomPalette, EventDTO, Theme, VideoDTO } from "./types";
 import { THEMES } from "./design";
 import { DEFAULT_PALETTE_ID } from "./palettes";
 
@@ -72,11 +72,21 @@ export const demo = {
     store.set(eventId, e);
     return e.event;
   },
-  updateEvent(eventId: string, patch: { name?: string; palette?: string; themes?: Theme[] }): EventDTO {
+  updateEvent(
+    eventId: string,
+    patch: { name?: string; palette?: string; themes?: Theme[]; customPalette?: CustomPalette | null }
+  ): EventDTO {
     const e = ensure(eventId);
     if (patch.name !== undefined) e.event.name = patch.name;
     if (patch.palette !== undefined) e.event.palette = patch.palette;
     if (patch.themes !== undefined) e.event.themes = patch.themes;
+    // A custom palette object switches the skin; null clears it back to `palette`.
+    if (patch.customPalette === null) {
+      delete e.event.customPalette;
+    } else if (patch.customPalette !== undefined) {
+      e.event.customPalette = patch.customPalette;
+      e.event.palette = "custom";
+    }
     return e.event;
   },
   getEvent(eventId: string): EventDTO {

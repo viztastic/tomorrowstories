@@ -25,6 +25,7 @@ import {
 } from "./shared/db.js";
 import { newEventCode, newEventId, newVideoId, newCommentId } from "./shared/ids.js";
 import { normalizeThemes } from "./shared/themes.js";
+import { normalizeCustomPalette } from "./shared/customPalette.js";
 import { authEnabled, requireOrganizer, requireOwner, isSuperAdmin } from "./shared/auth.js";
 import type { OrganizerIdentity } from "./shared/auth.js";
 import { limitsFor } from "./shared/plans.js";
@@ -41,6 +42,14 @@ const ALLOWED_EXT: Record<string, string> = {
   "video/webm": "webm",
   "video/x-matroska": "mkv",
   "video/3gpp": "3gp",
+};
+
+// Big-screen wallpaper uploads (custom palettes). Images only, smaller cap.
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MB
+const ALLOWED_IMAGE_EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
 };
 
 export async function handler(
@@ -84,6 +93,10 @@ export async function handler(
       // POST /events/{eventId}/uploads
       if (method === "POST" && event.rawPath.endsWith("/uploads")) {
         return await createUpload(p.eventId, event);
+      }
+      // POST /events/{eventId}/wallpaper  (organizer: presigned custom-palette image)
+      if (method === "POST" && event.rawPath.endsWith("/wallpaper")) {
+        return await createWallpaperUpload(p.eventId, event);
       }
       // GET /events/{eventId}/videos
       if (method === "GET" && event.rawPath.endsWith("/videos")) {
@@ -143,7 +156,15 @@ async function createEvent(event: APIGatewayProxyEventV2): Promise<APIGatewayPro
   // Custom topic buckets are optional — an organizer who doesn't customize gets
   // the default set. normalizeThemes throws a 400 on a malformed custom array.
   const themes = body.themes === undefined ? DEFAULT_THEMES : normalizeThemes(body.themes);
-  const palette = PALETTE_IDS.includes(String(body.palette)) ? String(body.palette) : DEFAULT_PALETTE_ID;
+
+  // Visual skin: a custom palette (organizer's own colours) wins over a named
+  // one and stamps the reserved "custom" id; otherwise a validated named id.
+  let palette = PALETTE_IDS.includes(String(body.palette)) ? String(body.palette) : DEFAULT_PALETTE_ID;
+  let customPalette: EventItem["customPalette"];
+  if (body.customPalette != null) {
+    customPalette = normalizeCustomPalette(body.customPalette, eventId);
+    palette = "custom";
+  }
 
   // Pick a short code that isn't already taken (collisions are astronomically
   // rare over 32^6, but check a few times to be safe).
@@ -162,6 +183,7 @@ async function createEvent(event: APIGatewayProxyEventV2): Promise<APIGatewayPro
     name: name.slice(0, 80),
     themes,
     palette,
+    ...(customPalette ? { customPalette } : {}),
     ...(identity ? { ownerId: identity.userId, ...ownerGsiKeys(identity.userId, createdAt, eventId) } : {}),
     createdAt,
     creatorIp: event.requestContext.http.sourceIp,
@@ -188,7 +210,12 @@ async function patchEventRoute(
   if (identity) requireOwner(e, identity);
 
   const body = parseBody(event);
-  const patch: { name?: string; palette?: string; themes?: EventItem["themes"] } = {};
+  const patch: {
+    name?: string;
+    palette?: string;
+    themes?: EventItem["themes"];
+    customPalette?: EventItem["customPalette"] | null;
+  } = {};
 
   if (body.name !== undefined) {
     const name = String(body.name).trim();
@@ -196,9 +223,23 @@ async function patchEventRoute(
     patch.name = name.slice(0, 80);
   }
 
-  if (body.palette !== undefined) {
+  // Custom palette takes precedence: an object switches the event to the "custom"
+  // skin; explicit null clears it and falls back to the named palette in the body
+  // (or the current one). Undefined leaves whatever's stored.
+  if (body.customPalette === null) {
+    patch.customPalette = null;
+    if (body.palette !== undefined) {
+      if (!PALETTE_IDS.includes(String(body.palette))) return badRequest("Unknown palette");
+      patch.palette = String(body.palette);
+    }
+  } else if (body.customPalette !== undefined) {
+    patch.customPalette = normalizeCustomPalette(body.customPalette, eventId);
+    patch.palette = "custom";
+  } else if (body.palette !== undefined) {
     if (!PALETTE_IDS.includes(String(body.palette))) return badRequest("Unknown palette");
     patch.palette = String(body.palette);
+    // Switching to a named palette drops any stored custom skin.
+    patch.customPalette = null;
   }
 
   if (body.themes !== undefined) {
@@ -383,6 +424,42 @@ async function createUpload(
   await putVideo(video);
 
   return created({ video: videoToDTO(video), upload: presigned });
+}
+
+/**
+ * Presigned POST for a big-screen wallpaper image (custom palettes). Organizer-
+ * only, and only for their own event. The image lands under the event's media
+ * prefix (media/<eventId>/wallpaper-*), so it's served by CloudFront /media/* and
+ * cleaned up with the rest of the event's files on delete. The client then PATCHes
+ * the event's customPalette with the returned key.
+ */
+async function createWallpaperUpload(
+  eventId: string,
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
+  const identity = await requireManager(event);
+  const e = await getEvent(eventId);
+  if (!e) return notFound("Event not found");
+  if (identity) requireOwner(e, identity);
+
+  const body = parseBody(event);
+  const contentType = String(body.contentType ?? "");
+  const ext = ALLOWED_IMAGE_EXT[contentType];
+  if (!ext) return badRequest("Unsupported image type (use JPEG, PNG or WebP)");
+
+  const key = `media/${eventId}/wallpaper-${newVideoId()}.${ext}`;
+  const presigned = await createPresignedPost(s3, {
+    Bucket: config.mediaBucket,
+    Key: key,
+    Conditions: [
+      ["content-length-range", 1, MAX_IMAGE_BYTES],
+      ["eq", "$Content-Type", contentType],
+    ],
+    Fields: { "Content-Type": contentType },
+    Expires: 600,
+  });
+
+  return created({ key, upload: presigned });
 }
 
 async function listVideosRoute(eventId: string): Promise<APIGatewayProxyResultV2> {
