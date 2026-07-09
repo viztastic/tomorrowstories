@@ -302,6 +302,8 @@ export class TomorrowStoriesStack extends Stack {
       [apigw.HttpMethod.PATCH, "/events/{eventId}"],
       [apigw.HttpMethod.POST, "/events/{eventId}/uploads"],
       [apigw.HttpMethod.GET, "/events/{eventId}/videos"],
+      [apigw.HttpMethod.POST, "/events/{eventId}/videos/delete"],
+      [apigw.HttpMethod.DELETE, "/events/{eventId}/videos/{videoId}"],
       [apigw.HttpMethod.POST, "/events/{eventId}/videos/{videoId}/like"],
       [apigw.HttpMethod.POST, "/events/{eventId}/videos/{videoId}/comments"],
       [apigw.HttpMethod.GET, "/events/{eventId}/videos/{videoId}/comments"],

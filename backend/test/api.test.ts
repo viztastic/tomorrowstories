@@ -283,6 +283,75 @@ describe("DELETE /events/{id}", () => {
   });
 });
 
+describe("delete stories (per-video + bulk)", () => {
+  const V1 = { eventId: "abc", videoId: "v1", title: "A", theme: "human", author: "M", status: "live", durationSec: 30, likes: 0, rawKey: "raw/abc/v1.mov", mediaKey: "media/abc/v1/out.mp4", createdAt: "2026-07-01T00:00:02Z" };
+  const V2 = { ...V1, videoId: "v2", rawKey: "raw/abc/v2.mov", mediaKey: "media/abc/v2/out.mp4", createdAt: "2026-07-01T00:00:01Z" };
+  const ADMIN = { "x-admin-key": "s3cr3t-admin-key" };
+
+  function withTwoVideos() {
+    ddb.on(GetCommand).resolves({ Item: THEME_EVENT });
+    ddb.on(QueryCommand).resolves({ Items: [] }); // comments: none
+    ddb.on(QueryCommand, { ExpressionAttributeValues: { ":pk": "EVENT#abc", ":v": "VIDEO#" } }).resolves({ Items: [V1, V2] });
+    ddb.on(BatchWriteCommand).resolves({});
+    s3.on(ListObjectsV2Command).resolves({ Contents: [], IsTruncated: false });
+    s3.on(DeleteObjectsCommand).resolves({});
+  }
+
+  it("401s a single delete without the admin password", async () => {
+    const { status } = parse(
+      await handler(ev("DELETE", "/events/abc/videos/v1", { path: { eventId: "abc", videoId: "v1" }, headers: { "x-admin-key": "nope" } }))
+    );
+    expect(status).toBe(401);
+  });
+
+  it("deletes one story and purges its raw + media prefixes", async () => {
+    withTwoVideos();
+    const { status, body } = parse(
+      await handler(ev("DELETE", "/events/abc/videos/v1", { path: { eventId: "abc", videoId: "v1" }, headers: ADMIN }))
+    );
+    expect(status).toBe(200);
+    expect(body.deleted).toBe(1);
+    expect(ddb.commandCalls(BatchWriteCommand).length).toBeGreaterThanOrEqual(1);
+    // one video → raw/ + media/ prefixes listed and purged
+    expect(s3.commandCalls(ListObjectsV2Command).length).toBe(2);
+  });
+
+  it("404s when the story doesn't exist", async () => {
+    withTwoVideos();
+    const { status } = parse(
+      await handler(ev("DELETE", "/events/abc/videos/ghost", { path: { eventId: "abc", videoId: "ghost" }, headers: ADMIN }))
+    );
+    expect(status).toBe(404);
+  });
+
+  it("bulk-deletes the selected stories", async () => {
+    withTwoVideos();
+    const { status, body } = parse(
+      await handler(ev("POST", "/events/abc/videos/delete", { path: { eventId: "abc" }, headers: ADMIN, body: { videoIds: ["v1", "v2"] } }))
+    );
+    expect(status).toBe(200);
+    expect(body.deleted).toBe(2);
+    // two videos × (raw/ + media/) prefixes
+    expect(s3.commandCalls(ListObjectsV2Command).length).toBe(4);
+  });
+
+  it("ignores unknown ids in a bulk delete, counting only real removals", async () => {
+    withTwoVideos();
+    const { status, body } = parse(
+      await handler(ev("POST", "/events/abc/videos/delete", { path: { eventId: "abc" }, headers: ADMIN, body: { videoIds: ["v1", "nope"] } }))
+    );
+    expect(status).toBe(200);
+    expect(body.deleted).toBe(1);
+  });
+
+  it("400s a bulk delete with an empty selection", async () => {
+    const { status } = parse(
+      await handler(ev("POST", "/events/abc/videos/delete", { path: { eventId: "abc" }, headers: ADMIN, body: { videoIds: [] } }))
+    );
+    expect(status).toBe(400);
+  });
+});
+
 describe("comments", () => {
   const VIDEO = { eventId: "abc", videoId: "v1", title: "A", theme: "human", author: "M", status: "live", durationSec: 5, likes: 0, rawKey: "r", createdAt: "2026-07-01T00:00:00Z" };
 

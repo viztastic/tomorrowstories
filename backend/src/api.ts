@@ -14,6 +14,7 @@ import {
   listAllEvents,
   listMyEvents,
   deleteEvent,
+  deleteVideos,
   updateEvent,
   ensureOrganizer,
   getOrganizer,
@@ -88,6 +89,14 @@ export async function handler(
       // GET /events/{eventId}/videos
       if (method === "GET" && event.rawPath.endsWith("/videos")) {
         return await listVideosRoute(p.eventId);
+      }
+      // POST /events/{eventId}/videos/delete  (organizer: bulk-remove selected stories)
+      if (method === "POST" && !p.videoId && event.rawPath.endsWith("/videos/delete")) {
+        return await bulkDeleteVideosRoute(p.eventId, event);
+      }
+      // DELETE /events/{eventId}/videos/{videoId}  (organizer: remove one story + its file)
+      if (method === "DELETE" && p.videoId && event.rawPath.endsWith(`/videos/${p.videoId}`)) {
+        return await deleteVideosRoute(p.eventId, [p.videoId], event);
       }
       // POST /events/{eventId}/videos/{videoId}/like
       if (method === "POST" && p.videoId && event.rawPath.endsWith("/like")) {
@@ -285,6 +294,56 @@ async function deleteEventRoute(
   // Free the owner's event-quota slot.
   if (e.ownerId) await bumpOrganizerEvents(e.ownerId, -1);
   return ok({ deleted: true, videos: videos.length });
+}
+
+/**
+ * Bulk-delete the stories named in the request body: `{ videoIds: string[] }`.
+ * Organizer-only (same guard as the single delete, applied in deleteVideosRoute).
+ */
+async function bulkDeleteVideosRoute(
+  eventId: string,
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
+  const body = parseBody(event);
+  const ids = Array.isArray(body.videoIds) ? [...new Set(body.videoIds.map(String))] : [];
+  if (!ids.length) return badRequest("No stories selected");
+  return deleteVideosRoute(eventId, ids, event);
+}
+
+/**
+ * Remove one or more videos from an event (metadata + comments + files) while
+ * leaving the event itself. Guarded by the organizer/owner check. Unknown ids are
+ * silently ignored; only videos that still exist are removed and counted. Files
+ * live under per-video key prefixes (`raw/<eventId>/<videoId>` and
+ * `media/<eventId>/<videoId>` — the latter covers both the no-transcode single
+ * object and the transcode output folder), so a prefix purge cleans each one.
+ */
+async function deleteVideosRoute(
+  eventId: string,
+  videoIds: string[],
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
+  const identity = await requireManager(event);
+  const e = await getEvent(eventId);
+  if (!e) return notFound("Event not found");
+  if (identity) requireOwner(e, identity);
+
+  const wanted = new Set(videoIds);
+  const targets = (await listVideos(eventId)).filter((v) => wanted.has(v.videoId));
+  if (!targets.length) return notFound("No matching stories");
+
+  // Drop the deleted videos' comments too, so none orphan under the event.
+  const targetIds = new Set(targets.map((v) => v.videoId));
+  const comments = (await listEventComments(eventId)).filter((c) => targetIds.has(c.videoId));
+
+  await deleteVideos(eventId, [...targetIds], comments.map((c) => c.SK));
+  await Promise.all(
+    targets.flatMap((v) => [
+      deletePrefix(config.rawBucket, `raw/${eventId}/${v.videoId}`),
+      deletePrefix(config.mediaBucket, `media/${eventId}/${v.videoId}`),
+    ])
+  );
+  return ok({ deleted: targets.length });
 }
 
 /** Delete every object under a key prefix (paged; 1000 keys per DeleteObjects call). */
