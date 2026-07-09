@@ -88,12 +88,10 @@ export const demo = {
     if (patch.palette !== undefined) e.event.palette = patch.palette;
     if (patch.themes !== undefined) e.event.themes = patch.themes;
     if (patch.viewPassword !== undefined) {
-      if (patch.viewPassword === null || patch.viewPassword === "") {
-        e.password = undefined;
-        unlocked.delete(eventId);
-      } else {
-        e.password = patch.viewPassword;
-      }
+      // Any password change re-locks this session, mirroring the backend where a
+      // new hash invalidates every outstanding view token.
+      unlocked.delete(eventId);
+      e.password = patch.viewPassword === null || patch.viewPassword === "" ? undefined : patch.viewPassword;
       e.event.locked = !!e.password;
     }
     return e.event;
@@ -148,7 +146,9 @@ export const demo = {
     return v?.likes ?? 0;
   },
   listComments(eventId: string, videoId: string): CommentDTO[] {
-    return ensure(eventId).comments.filter((c) => c.videoId === videoId);
+    const e = ensure(eventId);
+    gate(e);
+    return e.comments.filter((c) => c.videoId === videoId);
   },
   addComment(eventId: string, videoId: string, c: { author: string; text: string }): CommentDTO {
     const e = ensure(eventId);
@@ -157,7 +157,9 @@ export const demo = {
     return comment;
   },
   listEventComments(eventId: string): CommentDTO[] {
-    return ensure(eventId).comments;
+    const e = ensure(eventId);
+    gate(e);
+    return e.comments;
   },
   deleteEvent(eventId: string): void {
     store.delete(eventId);

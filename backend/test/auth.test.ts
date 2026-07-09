@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockClient } from "aws-sdk-client-mock";
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { hashPassword } from "../src/shared/lock.js";
 
 // Presigned POST + Clerk are the two external deps createEvent/verify touch.
 vi.mock("@aws-sdk/s3-presigned-post", () => ({
@@ -83,5 +84,39 @@ describe("organizer auth (Clerk configured)", () => {
     const handler = await loadHandler();
     const { status } = parse(await handler(ev("GET", "/me/events")));
     expect(status).toBe(401);
+  });
+});
+
+describe("view lock — owner bypass (Clerk configured)", () => {
+  const LOCKED_OWNED = { ...OWNED_EVENT, lock: hashPassword("letmein") };
+
+  it("lets the owning organizer read their own locked event with no password", async () => {
+    const handler = await loadHandler();
+    ddb.on(GetCommand).resolves({ Item: LOCKED_OWNED });
+    ddb.on(QueryCommand).resolves({ Items: [] });
+    const { status } = parse(
+      await handler(ev("GET", "/events/abc/videos", { path: { eventId: "abc" }, headers: { authorization: "Bearer owner-token" } }))
+    );
+    expect(status).toBe(200);
+  });
+
+  it("still blocks a signed-in NON-owner from a locked event (401 locked)", async () => {
+    const handler = await loadHandler();
+    ddb.on(GetCommand).resolves({ Item: LOCKED_OWNED });
+    const { status, body } = parse(
+      await handler(ev("GET", "/events/abc/videos", { path: { eventId: "abc" }, headers: { authorization: "Bearer other-token" } }))
+    );
+    expect(status).toBe(401);
+    expect(body.locked).toBe(true);
+  });
+
+  it("blocks an unauthenticated viewer of a locked event (401 locked)", async () => {
+    const handler = await loadHandler();
+    ddb.on(GetCommand).resolves({ Item: LOCKED_OWNED });
+    const { status, body } = parse(
+      await handler(ev("GET", "/events/abc/videos", { path: { eventId: "abc" } }))
+    );
+    expect(status).toBe(401);
+    expect(body.locked).toBe(true);
   });
 });

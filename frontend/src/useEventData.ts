@@ -24,10 +24,16 @@ export function useEventData(eventId: string, pollMs = 5000): EventData {
   const [error, setError] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
   const localIds = useRef<Set<string>>(new Set());
+  // Monotonic request id so a slow in-flight poll can't clobber a newer result —
+  // e.g. after unlocking, a poll that started pre-token (→ LockedError) must not
+  // overwrite the refresh that already succeeded and flip the gate back on.
+  const seq = useRef(0);
 
   const load = useCallback(async () => {
+    const id = ++seq.current;
     try {
       const { event: e, videos: v } = await api.listVideos(eventId);
+      if (id !== seq.current) return;
       setEvent(e);
       // Keep any optimistic local videos that the server hasn't returned yet.
       setVideos((prev) => {
@@ -38,6 +44,7 @@ export function useEventData(eventId: string, pollMs = 5000): EventData {
       setLocked(false);
       setError(null);
     } catch (err) {
+      if (id !== seq.current) return;
       // A locked wall isn't an error state — the caller shows the unlock prompt.
       if (err instanceof LockedError) {
         setLocked(true);
@@ -46,7 +53,7 @@ export function useEventData(eventId: string, pollMs = 5000): EventData {
         setError(err instanceof Error ? err.message : "Failed to load");
       }
     } finally {
-      setLoading(false);
+      if (id === seq.current) setLoading(false);
     }
   }, [eventId]);
 

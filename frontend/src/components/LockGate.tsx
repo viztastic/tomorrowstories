@@ -22,6 +22,9 @@ export function LockGate({ eventId, onUnlocked }: { eventId: string; onUnlocked:
     setErr(null);
     try {
       await api.unlock(eventId, password);
+      // Clear busy before handing off: if the token couldn't be persisted (e.g.
+      // storage disabled), the parent won't unmount us and the user must retry.
+      setBusy(false);
       onUnlocked();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Couldn’t unlock");

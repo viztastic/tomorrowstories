@@ -101,11 +101,11 @@ export async function handler(
       // .../videos/{videoId}/comments  (public: add / list a video's comments)
       if (p.videoId && event.rawPath.endsWith("/comments")) {
         if (method === "POST") return await createComment(p.eventId, p.videoId, event);
-        if (method === "GET") return await listVideoCommentsRoute(p.eventId, p.videoId);
+        if (method === "GET") return await listVideoCommentsRoute(p.eventId, p.videoId, event);
       }
       // GET /events/{eventId}/comments  (all comments — powers the archive)
       if (method === "GET" && !p.videoId && event.rawPath.endsWith(`/events/${p.eventId}/comments`)) {
-        return await listEventCommentsRoute(p.eventId);
+        return await listEventCommentsRoute(p.eventId, event);
       }
     }
     return notFound("Unknown route");
@@ -269,10 +269,18 @@ async function unlockRoute(
 }
 
 /**
- * View gate for the public content reads (event + video list). Returns a 401
- * `locked` response when the event has a password and the caller hasn't proved
- * it; returns null (allow) otherwise. The owning organizer (or a super-admin)
- * viewing while signed in is always let through on their own event.
+ * View gate for the public content reads (event, video list, comments). Returns
+ * a 401 `locked` response when the event has a password and the caller hasn't
+ * proved it; returns null (allow) otherwise. The owning organizer (or a
+ * super-admin) viewing while signed in is always let through on their own event.
+ *
+ * SCOPE: this gates the metadata that lets you *discover* clips. The media bytes
+ * themselves are served by CloudFront at unguessable but unsigned URLs
+ * (media/<eventId>/<videoId>.<ext>). Locking hides the listing, so a stranger
+ * with only the share link can't enumerate those URLs — but anyone who already
+ * captured a direct media URL while the event was open keeps access. Fully
+ * revoking that requires signed CloudFront URLs/cookies minted post-unlock — a
+ * larger follow-up, out of scope here.
  */
 async function viewGate(
   e: EventItem,
@@ -506,12 +514,29 @@ async function createComment(
   return created(commentToDTO(item));
 }
 
-async function listVideoCommentsRoute(eventId: string, videoId: string): Promise<APIGatewayProxyResultV2> {
+async function listVideoCommentsRoute(
+  eventId: string,
+  videoId: string,
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
+  // Comments are wall content too — gate them, else a locked event leaks its
+  // videoIds (and comment text) and those videoIds reconstruct media URLs.
+  const e = await getEvent(eventId);
+  if (!e) return notFound("Event not found");
+  const denied = await viewGate(e, event);
+  if (denied) return denied;
   const comments = (await listVideoComments(eventId, videoId)).map(commentToDTO);
   return ok({ comments });
 }
 
-async function listEventCommentsRoute(eventId: string): Promise<APIGatewayProxyResultV2> {
+async function listEventCommentsRoute(
+  eventId: string,
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
+  const e = await getEvent(eventId);
+  if (!e) return notFound("Event not found");
+  const denied = await viewGate(e, event);
+  if (denied) return denied;
   const comments = (await listEventComments(eventId)).map(commentToDTO);
   return ok({ comments });
 }

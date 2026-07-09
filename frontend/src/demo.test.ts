@@ -76,4 +76,21 @@ describe("demo store — view lock", () => {
     expect(demo.updateEvent(ev.eventId, {}).locked).toBe(false);
     expect(() => demo.listVideos(ev.eventId)).not.toThrow();
   });
+
+  it("re-locks the session when the password is rotated (mirrors token invalidation)", () => {
+    const ev = demo.createEvent("Lockable4");
+    demo.updateEvent(ev.eventId, { viewPassword: "old1" });
+    demo.unlock(ev.eventId, "old1");
+    expect(() => demo.listVideos(ev.eventId)).not.toThrow();
+    demo.updateEvent(ev.eventId, { viewPassword: "new1" }); // rotate → old session no longer valid
+    expect(() => demo.listVideos(ev.eventId)).toThrow();
+  });
+
+  it("gates the comment reads too", () => {
+    const ev = demo.createEvent("Lockable5");
+    demo.updateEvent(ev.eventId, { viewPassword: "pw12" });
+    expect(() => demo.listEventComments(ev.eventId)).toThrow();
+    demo.unlock(ev.eventId, "pw12");
+    expect(() => demo.listEventComments(ev.eventId)).not.toThrow();
+  });
 });

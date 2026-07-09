@@ -316,6 +316,7 @@ describe("comments", () => {
   });
 
   it("lists a video's comments", async () => {
+    ddb.on(GetCommand).resolves({ Item: THEME_EVENT }); // unlocked event → view gate passes
     ddb.on(QueryCommand).resolves({
       Items: [{ eventId: "abc", videoId: "v1", commentId: "c1", author: "Sam", text: "Nice", createdAt: "2026-07-01T00:00:01Z" }],
     });
@@ -438,6 +439,15 @@ describe("view lock (password-gated wall)", () => {
       await handler(ev("GET", "/events/abc/videos", { path: { eventId: "abc" } }))
     );
     expect(status).toBe(200);
+  });
+
+  it("gates the comments route too (no videoId leak from a locked event)", async () => {
+    ddb.on(GetCommand).resolves({ Item: LOCKED_EVENT });
+    const { status, body } = parse(
+      await handler(ev("GET", "/events/abc/comments", { path: { eventId: "abc" } }))
+    );
+    expect(status).toBe(401);
+    expect(body.locked).toBe(true);
   });
 });
 

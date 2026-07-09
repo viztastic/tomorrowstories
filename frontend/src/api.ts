@@ -136,7 +136,7 @@ export const api = {
   /** Comments on one video, oldest first. */
   async listComments(eventId: string, videoId: string): Promise<CommentDTO[]> {
     if (DEMO || !(await getApiUrl())) return demo.listComments(eventId, videoId);
-    const r = await req<{ comments: CommentDTO[] }>(`/events/${eventId}/videos/${videoId}/comments`);
+    const r = await req<{ comments: CommentDTO[] }>(`/events/${eventId}/videos/${videoId}/comments`, { headers: viewHeaders(eventId) });
     return r.comments;
   },
 
@@ -149,7 +149,7 @@ export const api = {
   /** Every comment in an event — used by the archive export. */
   async listEventComments(eventId: string): Promise<CommentDTO[]> {
     if (DEMO || !(await getApiUrl())) return demo.listEventComments(eventId);
-    const r = await req<{ comments: CommentDTO[] }>(`/events/${eventId}/comments`);
+    const r = await req<{ comments: CommentDTO[] }>(`/events/${eventId}/comments`, { headers: viewHeaders(eventId) });
     return r.comments;
   },
 
