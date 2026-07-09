@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Home } from "./components/Home";
 import { Landing } from "./components/Landing";
 import { Admin } from "./components/Admin";
 import { Attendee } from "./components/attendee/Attendee";
@@ -18,7 +19,7 @@ function BigScreenRoute() {
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      <Route path="/" element={<Home />} />
       <Route path="/join" element={<Landing mode="join" />} />
       <Route path="/sign-in/*" element={<SignInScreen />} />
       {/* Organizer surfaces require sign-in (open in demo/unconfigured mode). */}
