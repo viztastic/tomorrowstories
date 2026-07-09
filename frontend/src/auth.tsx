@@ -9,7 +9,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { ClerkProvider, SignIn, UserButton, useAuth } from "@clerk/react";
+import { ClerkProvider, SignIn, SignUp, UserButton, useAuth } from "@clerk/react";
 import { DEMO, getConfig } from "./config";
 import { setTokenGetter } from "./api";
 import { BRAND_GRAD, FONT_DISPLAY, INK, MUTED, PAGE_BG } from "./design";
@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (!cfg.ready) return null; // brief config fetch before we know the mode
   if (!cfg.pk) return <MockAuthProvider>{children}</MockAuthProvider>; // Clerk not configured yet
   return (
-    <ClerkProvider publishableKey={cfg.pk} afterSignOutUrl="/" signInUrl="/sign-in" signUpUrl="/sign-in">
+    <ClerkProvider publishableKey={cfg.pk} afterSignOutUrl="/" signInUrl="/sign-in" signUpUrl="/sign-up">
       <ClerkBridge>{children}</ClerkBridge>
     </ClerkProvider>
   );
@@ -102,24 +102,47 @@ export function OrganizerButton() {
   return <UserButton />;
 }
 
-/** The /sign-in page. Redirects home once signed in (incl. demo/mock). */
-export function SignInScreen() {
-  const { clerkActive, isLoaded, isSignedIn } = useOrganizer();
-  if (isLoaded && isSignedIn) return <Navigate to="/admin" replace />;
-  if (!clerkActive) return <Navigate to="/" replace />;
+/** Shared branded chrome for the /sign-in and /sign-up pages. */
+function AuthShell({ subtitle, children }: { subtitle: string; children: ReactNode }) {
   return (
     <div style={signInPage}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
         <div style={{ width: 40, height: 40, borderRadius: 13, background: BRAND_GRAD }} />
         <div style={{ display: "flex", flexDirection: "column", lineHeight: 1 }}>
           <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 22, color: INK }}>Tomorrow Stories</span>
-          <span style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginTop: 4 }}>Organizer sign-in</span>
+          <span style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginTop: 4 }}>{subtitle}</span>
         </div>
       </div>
-      {/* Clerk renders email-code + social buttons per the dashboard config.
-          After sign-in, land on the dashboard to create the first event. */}
-      <SignIn signUpUrl="/sign-in" fallbackRedirectUrl="/admin" />
+      {children}
     </div>
+  );
+}
+
+/** The /sign-in page for returning organizers. New organizers follow the
+ *  "Sign up" link to /sign-up. Redirects to the dashboard once signed in. */
+export function SignInScreen() {
+  const { clerkActive, isLoaded, isSignedIn } = useOrganizer();
+  if (isLoaded && isSignedIn) return <Navigate to="/admin" replace />;
+  if (!clerkActive) return <Navigate to="/" replace />;
+  return (
+    <AuthShell subtitle="Organizer sign-in">
+      <SignIn signUpUrl="/sign-up" fallbackRedirectUrl="/admin" />
+    </AuthShell>
+  );
+}
+
+/** The /sign-up page — lets a NEW organizer create an account. Clerk renders
+ *  whatever the instance requires (email + verification code, plus password /
+ *  name if those are enabled). Without this route, new emails hit /sign-in and
+ *  fail with "couldn't find your account". Redirects to the dashboard on success. */
+export function SignUpScreen() {
+  const { clerkActive, isLoaded, isSignedIn } = useOrganizer();
+  if (isLoaded && isSignedIn) return <Navigate to="/admin" replace />;
+  if (!clerkActive) return <Navigate to="/" replace />;
+  return (
+    <AuthShell subtitle="Create your organizer account">
+      <SignUp signInUrl="/sign-in" fallbackRedirectUrl="/admin" />
+    </AuthShell>
   );
 }
 
