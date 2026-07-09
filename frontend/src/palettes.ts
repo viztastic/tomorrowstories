@@ -42,6 +42,10 @@ export interface Palette {
   qrPanelInk: string; // text color for the event code when qrPanelBg is set
   qrDark: string; // QR module (foreground) color
   qrLight: string; // QR background + surrounding tile fill
+  // Big-screen background layer painted BEHIND the stage. A CSS background-image
+  // value: "none" for the named palettes; `url(...) center/cover` when a custom
+  // palette carries an uploaded wallpaper. See customPalette.ts + BigScreen.
+  wallpaper: string;
 }
 
 export const DEFAULT_PALETTE_ID = "aurora";
@@ -73,6 +77,7 @@ export const PALETTES: Record<string, Palette> = {
     qrPanelInk: "#F4F1EC",
     qrDark: "#0C0A12",
     qrLight: "#F4F1EC",
+    wallpaper: "none",
   },
   // Bold civic energy in a LIGHT layout — white dominant, red the hero accent,
   // yellow on the active chips. Inspired by the YMCA World Council palette.
@@ -101,6 +106,7 @@ export const PALETTES: Record<string, Palette> = {
     qrPanelInk: "#17181C",
     qrDark: "#0C0A12",
     qrLight: "#F4F1EC",
+    wallpaper: "none",
   },
   // Cool deep-ocean blue.
   marine: {
@@ -128,6 +134,7 @@ export const PALETTES: Record<string, Palette> = {
     qrPanelInk: "#EAF6FF",
     qrDark: "#0C0A12",
     qrLight: "#F4F1EC",
+    wallpaper: "none",
   },
   // Warm civic gold in a LIGHT layout — a #E3C166 yellow wall with #AD2923 brick
   // red as the hero accent. On the big screen the QR + event code sit on a solid
@@ -158,6 +165,7 @@ export const PALETTES: Record<string, Palette> = {
     qrPanelInk: "#FFFFFF", // white event code text on the red card
     qrDark: "#FFFFFF", // white QR modules…
     qrLight: "#AD2923", // …on red, so the QR reads as white-on-red
+    wallpaper: "none",
   },
 };
 
@@ -192,6 +200,7 @@ const VAR_NAMES: Record<keyof Omit<Palette, "id" | "name">, string> = {
   qrPanelInk: "--ts-qr-panel-ink",
   qrDark: "--ts-qr-dark",
   qrLight: "--ts-qr-light",
+  wallpaper: "--ts-wallpaper",
 };
 
 /** { "--ts-accent": "#FF6B35", … } for a palette — what PaletteProvider writes to :root. */

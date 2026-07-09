@@ -8,6 +8,21 @@ export interface Theme {
   color: string;
 }
 
+/**
+ * An organizer's custom palette: the handful of base colours they choose plus an
+ * optional uploaded wallpaper (stored as an S3 key). The frontend derives all
+ * the text/border/secondary colours from these for legibility — see
+ * frontend/src/customPalette.ts. Present only when the event uses a custom skin
+ * (event.palette === "custom"); named-palette events leave this undefined.
+ */
+export interface EventCustomPalette {
+  page: string; // the very-background colour (behind / around the stage)
+  stage: string; // the container that holds the stories
+  qr: string; // the container that holds the QR + event code
+  accent: string; // primary accent colour
+  wallpaperKey?: string; // S3 key of the big-screen background image (media bucket)
+}
+
 export type VideoStatus = "processing" | "live" | "failed";
 
 export type Plan = "free" | "paid" | "unlimited";
@@ -36,6 +51,7 @@ export interface EventItem {
   name: string;
   themes: Theme[]; // topic buckets attendees choose from
   palette?: string; // visual palette id (color skin); undefined = default. See config.PALETTE_IDS
+  customPalette?: EventCustomPalette; // organizer's custom skin (when palette === "custom")
   ownerId?: string; // Clerk user id of the organizer who owns it (undefined = legacy)
   // GSI1 (owner → events) attributes; set whenever ownerId is set.
   GSI1PK?: string; // ORG#<ownerId>
@@ -80,12 +96,22 @@ export interface CommentItem {
 
 // ---- Wire shapes (what the API returns to the browser) ----
 
+/** Custom palette as sent to the browser — the wallpaper key expanded to a URL. */
+export interface CustomPaletteDTO {
+  page: string;
+  stage: string;
+  qr: string;
+  accent: string;
+  wallpaper?: string; // full URL of the uploaded background image (if any)
+}
+
 export interface EventDTO {
   eventId: string;
   code: string;
   name: string;
   themes: Theme[];
   palette: string; // visual palette id (always resolved to a concrete id in the DTO)
+  customPalette?: CustomPaletteDTO; // present only when palette === "custom"
   attendeeUrl: string;
   bigScreenUrl: string;
   createdAt: string;

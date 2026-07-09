@@ -1,9 +1,10 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Home } from "./components/Home";
 import { Landing } from "./components/Landing";
 import { Admin } from "./components/Admin";
 import { Attendee } from "./components/attendee/Attendee";
 import { BigScreen } from "./components/big/BigScreen";
-import { RequireOrganizer, SignInScreen } from "./auth";
+import { RequireOrganizer, SignInScreen, SignUpScreen } from "./auth";
 
 function AttendeeRoute() {
   const { eventId } = useParams();
@@ -18,9 +19,10 @@ function BigScreenRoute() {
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      <Route path="/" element={<Home />} />
       <Route path="/join" element={<Landing mode="join" />} />
       <Route path="/sign-in/*" element={<SignInScreen />} />
+      <Route path="/sign-up/*" element={<SignUpScreen />} />
       {/* Organizer surfaces require sign-in (open in demo/unconfigured mode). */}
       <Route path="/create" element={<RequireOrganizer><Landing mode="create" /></RequireOrganizer>} />
       <Route path="/admin" element={<RequireOrganizer><Admin /></RequireOrganizer>} />

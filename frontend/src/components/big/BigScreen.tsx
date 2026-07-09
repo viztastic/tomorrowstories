@@ -9,6 +9,8 @@ import { Thumb, VideoCard } from "../attendee/VideoCard";
 import { LockGate } from "../LockGate";
 import { useEventData } from "../../useEventData";
 import { useMediaQuery } from "../../useMediaQuery";
+import { useOrganizer } from "../../auth";
+import { api } from "../../api";
 
 const COLS = 6;
 const ROWS = 4; // cells per column strip; the strip is 200% of the stage, so ~2 are on screen
@@ -79,9 +81,9 @@ export function BigScreen({ eventId }: { eventId: string }) {
   }
 
   return (
-    <PaletteProvider paletteId={data.event.palette}>
+    <PaletteProvider paletteId={data.event.palette} custom={data.event.customPalette}>
       {isWide ? (
-        <Projector event={data.event} live={live} trending={trending} />
+        <Projector eventId={eventId} event={data.event} live={live} trending={trending} refresh={data.refresh} />
       ) : (
         <OrganizerPanel eventId={eventId} event={data.event} live={live} trending={trending} />
       )}
@@ -171,13 +173,17 @@ function OrganizerPanel({
 /* ----------------------------------------------------------------- desktop */
 
 function Projector({
+  eventId,
   event,
   live,
   trending,
+  refresh,
 }: {
+  eventId: string;
   event: { name: string; code: string; attendeeUrl: string; themes: Theme[] };
   live: VideoDTO[];
   trending: { theme: Theme; count: number }[];
+  refresh: () => void;
 }) {
   // Snapshot the clip into state (not derived from the live poll) so the focus
   // view stays open on the facilitator's intent even if a poll transiently drops
@@ -347,7 +353,7 @@ function Projector({
         </aside>
         </div>
       </div>
-      {live.length > 0 && <FacilitatorTable live={live} themes={event.themes} onOpen={setFocused} />}
+      {live.length > 0 && <FacilitatorTable eventId={eventId} live={live} themes={event.themes} onOpen={setFocused} refresh={refresh} />}
       {focused && (
         <FocusModal video={focused} theme={themeById(event.themes, focused.theme)} onClose={() => setFocused(null)} />
       )}
@@ -359,35 +365,151 @@ function Projector({
  * The facilitator's full list, below the 100vh wall (scroll down). Every clip as a
  * row: first-frame thumbnail, title, author, theme — click to play it in focus.
  * Lets them go through stories sequentially without waiting on the ambient wall.
+ *
+ * Signed-in organizers also get moderation controls: a per-row delete, a
+ * select-all checkbox, and a bulk "delete selected" bar. These are gated on
+ * sign-in (the big-screen route itself is public), and the API enforces
+ * ownership — a viewer who isn't the owner just gets an error if they try.
  */
-function FacilitatorTable({ live, themes, onOpen }: { live: VideoDTO[]; themes: Theme[]; onOpen: (v: VideoDTO) => void }) {
+export function FacilitatorTable({
+  eventId,
+  live,
+  themes,
+  onOpen,
+  refresh,
+}: {
+  eventId: string;
+  live: VideoDTO[];
+  themes: Theme[];
+  onOpen: (v: VideoDTO) => void;
+  refresh: () => void;
+}) {
+  const { isSignedIn } = useOrganizer();
+  const canManage = isSignedIn;
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // A just-deleted clip is hidden locally right away — DynamoDB's list read is
+  // eventually consistent, so it could otherwise linger in a poll or two.
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const rows = useMemo(() => live.filter((v) => !hidden.has(v.id)), [live, hidden]);
+  const allSelected = rows.length > 0 && rows.every((v) => selected.has(v.id));
+  const selCount = rows.reduce((n, v) => n + (selected.has(v.id) ? 1 : 0), 0);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(rows.map((v) => v.id)));
+  }
+
+  async function remove(ids: string[]) {
+    if (!ids.length || busy) return;
+    const what = ids.length === 1 ? "this story" : `${ids.length} stories`;
+    if (!window.confirm(`Delete ${what}? This can’t be undone.`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (ids.length === 1) await api.deleteVideo(eventId, ids[0]);
+      else await api.deleteVideos(eventId, ids);
+      setHidden((prev) => new Set([...prev, ...ids]));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div style={{ width: "100%", maxWidth: 1340, margin: "0 auto", padding: "34px 26px 72px" }}>
       <Link to="/admin" style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: MUTED, textDecoration: "none", padding: "8px 14px", borderRadius: 999, border: "1px solid rgba(var(--ts-neutral-rgb),.14)", background: "rgba(var(--ts-neutral-rgb),.04)", marginBottom: 18 }}>← Back to dashboard</Link>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        {canManage && rows.length > 0 && (
+          <RowCheckbox checked={allSelected} indeterminate={selCount > 0 && !allSelected} onChange={toggleAll} label="Select all stories" />
+        )}
         <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 24, letterSpacing: "-.02em" }}>All stories</span>
-        <span style={{ fontSize: 14, color: MUTED, fontWeight: 600 }}>{live.length} · newest first</span>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {live.map((v) => {
-          const t = themeById(themes, v.theme);
-          return (
-            <button key={v.id} onClick={() => onOpen(v)} style={tableRow}>
-              <TableThumb video={v} theme={t} />
-              <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                <div style={{ fontWeight: 700, fontSize: 15.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.title}</div>
-                <div style={{ fontSize: 13, color: MUTED, marginTop: 3 }}>{v.author}</div>
-              </div>
-              <span style={{ flex: "none", padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800, background: t.color, color: ON_ACCENT, whiteSpace: "nowrap" }}>{t.name}</span>
-              <span style={{ flex: "none", width: 48, textAlign: "right", fontSize: 12.5, color: MUTED2, fontWeight: 700 }}>{fmtDurShort(v.durationSec)}</span>
-              <span style={{ flex: "none", width: 30, height: 30, borderRadius: "50%", background: "rgba(var(--ts-neutral-rgb),.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 5.5L18.5 12L8 18.5V5.5Z" fill="#F4F1EC" /></svg>
-              </span>
+        <span style={{ fontSize: 14, color: MUTED, fontWeight: 600 }}>{rows.length} · newest first</span>
+        {canManage && selCount > 0 && (
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, color: MUTED, fontWeight: 700 }}>{selCount} selected</span>
+            <button onClick={() => setSelected(new Set())} disabled={busy} style={ghostBtn}>Clear</button>
+            <button onClick={() => remove(rows.filter((v) => selected.has(v.id)).map((v) => v.id))} disabled={busy} style={{ ...dangerBtn, opacity: busy ? 0.6 : 1 }}>
+              <TrashIcon /> Delete selected
             </button>
+          </div>
+        )}
+      </div>
+      {error && <div style={{ fontSize: 13, color: DANGER_INK, fontWeight: 700, marginBottom: 12 }}>{error}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {rows.map((v) => {
+          const t = themeById(themes, v.theme);
+          const sel = selected.has(v.id);
+          return (
+            <div key={v.id} style={{ ...tableRow, cursor: "default", ...(sel ? selectedRow : null) }}>
+              {canManage && (
+                <RowCheckbox checked={sel} onChange={() => toggle(v.id)} label={`Select “${v.title}”`} />
+              )}
+              <button onClick={() => onOpen(v)} style={rowPlay}>
+                <TableThumb video={v} theme={t} />
+                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                  <div style={{ fontWeight: 700, fontSize: 15.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.title}</div>
+                  <div style={{ fontSize: 13, color: MUTED, marginTop: 3 }}>{v.author}</div>
+                </div>
+                <span style={{ flex: "none", padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800, background: t.color, color: ON_ACCENT, whiteSpace: "nowrap" }}>{t.name}</span>
+                <span style={{ flex: "none", width: 48, textAlign: "right", fontSize: 12.5, color: MUTED2, fontWeight: 700 }}>{fmtDurShort(v.durationSec)}</span>
+                <span style={{ flex: "none", width: 30, height: 30, borderRadius: "50%", background: "rgba(var(--ts-neutral-rgb),.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 5.5L18.5 12L8 18.5V5.5Z" fill="#F4F1EC" /></svg>
+                </span>
+              </button>
+              {canManage && (
+                <button onClick={() => remove([v.id])} disabled={busy} aria-label={`Delete “${v.title}”`} title="Delete story" style={{ ...trashBtn, opacity: busy ? 0.6 : 1 }}>
+                  <TrashIcon />
+                </button>
+              )}
+            </div>
           );
         })}
       </div>
     </div>
+  );
+}
+
+/** Native checkbox styled for the dark canvas; supports an indeterminate state. */
+function RowCheckbox({ checked, indeterminate, onChange, label }: { checked: boolean; indeterminate?: boolean; onChange: () => void; label: string }) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = !!indeterminate;
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={label}
+      style={{ flex: "none", width: 18, height: 18, cursor: "pointer", accentColor: "var(--ts-accent)" }}
+    />
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v12a1 1 0 01-1 1H7a1 1 0 01-1-1V7M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -492,6 +614,16 @@ function FocusModal({ video, theme, onClose }: { video: VideoDTO; theme: Theme; 
   );
 }
 
+/** #rgb / #rrggbb → rgba() at the given alpha. Falls back to a mid grey on junk so
+ *  a bad custom colour never blanks the label. */
+function withAlpha(hex: string, alpha: number): string {
+  let h = (hex || "").trim().replace(/^#/, "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return `rgba(136,136,136,${alpha})`;
+  const n = parseInt(h, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
 /** Decorative gradient panel that keeps the canvas full when there are few clips. */
 function PlaceholderCard({ pair }: { pair: [string, string] }) {
   return (
@@ -551,10 +683,11 @@ function CredentialBlock({
 function EventCode({ code, size, align = "left", onColor }: { code: string; size: number; align?: "left" | "center"; onColor?: string }) {
   const host = typeof window !== "undefined" ? window.location.host : "";
   const codeColor = onColor ?? INK;
-  // On a saturated card the muted labels read as translucent white; qrPanelInk is
-  // white for the only palette that sets it, so white-alpha is the right derive.
-  const labelColor = onColor ? "rgba(255,255,255,.72)" : MUTED2;
-  const subColor = onColor ? "rgba(255,255,255,.82)" : MUTED;
+  // On a solid QR card the muted labels are the card's ink at reduced alpha. Deriving
+  // from qrPanelInk (not assuming white) keeps them legible on a LIGHT card too — a
+  // custom yellow card gets dark labels, Beacon's red card keeps white ones.
+  const labelColor = onColor ? withAlpha(onColor, 0.72) : MUTED2;
+  const subColor = onColor ? withAlpha(onColor, 0.82) : MUTED;
   return (
     <div style={{ textAlign: align }}>
       <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".16em", color: labelColor }}>OR ENTER CODE</div>
@@ -603,9 +736,19 @@ function BigCard({ video, theme, autoPlay, onOpen }: { video: VideoDTO; theme: T
 /* ------------------------------------------------------------------ styles */
 
 const tableRow: CSSProperties = { display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "10px 14px", borderRadius: 14, border: "1px solid rgba(var(--ts-neutral-rgb),.07)", background: "rgba(var(--ts-neutral-rgb),.03)", cursor: "pointer", fontFamily: "inherit", color: INK };
+const selectedRow: CSSProperties = { border: `1px solid ${ACCENT}`, background: "rgba(var(--ts-neutral-rgb),.06)" };
+// The clickable "play" region of a row — a real button so it stays keyboard-
+// reachable, but visually bare so the row reads as one surface.
+const rowPlay: CSSProperties = { display: "flex", alignItems: "center", gap: 14, flex: 1, minWidth: 0, padding: 0, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: INK };
+const dangerBtn: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 999, border: `1px solid ${DANGER}`, background: "transparent", color: DANGER_INK, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" };
+const ghostBtn: CSSProperties = { padding: "8px 13px", borderRadius: 999, border: "1px solid rgba(var(--ts-neutral-rgb),.14)", background: "transparent", color: MUTED, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" };
+const trashBtn: CSSProperties = { flex: "none", width: 34, height: 34, borderRadius: 10, border: "1px solid rgba(var(--ts-neutral-rgb),.12)", background: "rgba(var(--ts-neutral-rgb),.04)", color: DANGER_INK, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 // Fades the marquee's cropped edges so cards dissolve at the top/bottom of the wall.
 const wallMask = "linear-gradient(180deg,transparent,#000 6%,#000 94%,transparent)";
-const canvasBg = PAGE_BG;
+// A custom palette can paint an uploaded wallpaper behind everything: the
+// --ts-wallpaper layer ("none" for the named palettes, so they render exactly as
+// before) sits over the flat page background as a fallback.
+const canvasBg = `var(--ts-wallpaper), ${PAGE_BG}`;
 const canvasCenter: CSSProperties = { minHeight: "100vh", background: canvasBg, color: INK, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 };
 const mobileCanvas: CSSProperties = {
   minHeight: "100vh",

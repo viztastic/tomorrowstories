@@ -10,6 +10,21 @@ export function eventToDTO(e: EventItem, opts: { admin?: boolean } = {}): EventD
     // Legacy events created before palettes have no `palette` — resolve to the
     // default so the client always receives a concrete id.
     palette: e.palette || DEFAULT_PALETTE_ID,
+    // Custom skin (if any): expand the stored wallpaper key to a CDN URL so the
+    // client can paint it directly.
+    ...(e.customPalette
+      ? {
+          customPalette: {
+            page: e.customPalette.page,
+            stage: e.customPalette.stage,
+            qr: e.customPalette.qr,
+            accent: e.customPalette.accent,
+            ...(e.customPalette.wallpaperKey
+              ? { wallpaper: `${config.mediaBaseUrl}/${e.customPalette.wallpaperKey}` }
+              : {}),
+          },
+        }
+      : {}),
     attendeeUrl: `${config.siteBaseUrl}/e/${e.eventId}`,
     bigScreenUrl: `${config.siteBaseUrl}/e/${e.eventId}/big`,
     createdAt: e.createdAt,

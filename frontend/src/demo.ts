@@ -1,7 +1,7 @@
 // In-memory "backend" for demo mode (VITE_DEMO=1 or no /config.json). Lets the
 // whole app run with no AWS — mirrors the seeded feel of the original prototype.
 
-import type { CommentDTO, EventDTO, Theme, VideoDTO } from "./types";
+import type { CommentDTO, CustomPalette, EventDTO, Theme, VideoDTO } from "./types";
 import { THEMES } from "./design";
 import { DEFAULT_PALETTE_ID } from "./palettes";
 import { LockedError } from "./errors";
@@ -82,7 +82,10 @@ export const demo = {
     store.set(eventId, e);
     return e.event;
   },
-  updateEvent(eventId: string, patch: { name?: string; palette?: string; themes?: Theme[]; viewPassword?: string | null }): EventDTO {
+  updateEvent(
+    eventId: string,
+    patch: { name?: string; palette?: string; themes?: Theme[]; customPalette?: CustomPalette | null; viewPassword?: string | null }
+  ): EventDTO {
     const e = ensure(eventId);
     if (patch.name !== undefined) e.event.name = patch.name;
     if (patch.palette !== undefined) e.event.palette = patch.palette;
@@ -93,6 +96,13 @@ export const demo = {
       unlocked.delete(eventId);
       e.password = patch.viewPassword === null || patch.viewPassword === "" ? undefined : patch.viewPassword;
       e.event.locked = !!e.password;
+    }
+    // A custom palette object switches the skin; null clears it back to `palette`.
+    if (patch.customPalette === null) {
+      delete e.event.customPalette;
+    } else if (patch.customPalette !== undefined) {
+      e.event.customPalette = patch.customPalette;
+      e.event.palette = "custom";
     }
     return e.event;
   },
@@ -163,5 +173,13 @@ export const demo = {
   },
   deleteEvent(eventId: string): void {
     store.delete(eventId);
+  },
+  deleteVideos(eventId: string, videoIds: string[]): number {
+    const e = ensure(eventId);
+    const remove = new Set(videoIds);
+    const before = e.videos.length;
+    e.videos = e.videos.filter((v) => !remove.has(v.id));
+    e.comments = e.comments.filter((c) => !remove.has(c.videoId));
+    return before - e.videos.length;
   },
 };

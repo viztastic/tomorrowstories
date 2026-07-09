@@ -217,7 +217,9 @@ export function Landing({ mode = "full" }: { mode?: LandingMode }) {
       />
 
       <div style={sectionLabel}>WALL & APP THEME</div>
-      <PalettePicker value={palette} onChange={setPalette} />
+      {/* Custom skins are built in the Admin editor (they can upload a wallpaper,
+          which needs the event to exist first) — offer named palettes here. */}
+      <PalettePicker value={palette} onChange={setPalette} allowCustom={false} />
 
       <button type="button" onClick={() => setShowCustomize((v) => !v)} style={linkBtn}>
         {showCustomize ? "− Hide topic customization" : "+ Customize the topics attendees pick"}

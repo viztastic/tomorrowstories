@@ -1,17 +1,20 @@
 import { DEMO, getApiUrl } from "./config";
 import { demo } from "./demo";
 import { LockedError } from "./errors";
-import type { CommentDTO, EventDTO, Theme, VideoDTO } from "./types";
+import type { CommentDTO, CustomPalette, EventDTO, Theme, VideoDTO } from "./types";
 
 export { LockedError } from "./errors";
 
-/** Organizer-editable event settings (create options + PATCH body). */
+/** Organizer-editable event settings (create options + PATCH body).
+ *  customPalette: an object switches the event to a custom skin; `null` clears it
+ *  (revert to the named `palette`); undefined leaves it untouched. */
 export interface EventSettings {
   name?: string;
   palette?: string;
   themes?: Theme[];
   /** Post-event view password. A non-empty string locks the wall; null/"" unlocks it. */
   viewPassword?: string | null;
+  customPalette?: CustomPalette | null;
 }
 
 // A viewer who entered a locked wall's password gets a view token; we stash it
@@ -30,6 +33,24 @@ export function clearViewToken(eventId: string) {
 function viewHeaders(eventId: string): Record<string, string> {
   const t = getViewToken(eventId);
   return t ? { "x-view-token": t } : {};
+}
+
+/** The API stores the wallpaper as an S3 key; the client renders it from a URL.
+ *  On the wire we send the key: a fresh upload carries it explicitly, otherwise
+ *  we recover it from the CDN URL's path (media/<eventId>/wallpaper-*). A blob:
+ *  preview URL yields no `media/` key, so it's dropped rather than sent. */
+function toCustomPaletteBody(cp: CustomPalette | null | undefined) {
+  if (cp == null) return cp; // null clears it; undefined is dropped by JSON.stringify
+  let wallpaperKey = cp.wallpaperKey;
+  if (!wallpaperKey && cp.wallpaper) {
+    try {
+      wallpaperKey = new URL(cp.wallpaper).pathname.replace(/^\//, "") || undefined;
+    } catch {
+      wallpaperKey = undefined;
+    }
+  }
+  if (wallpaperKey && !wallpaperKey.startsWith("media/")) wallpaperKey = undefined;
+  return { page: cp.page, stage: cp.stage, qr: cp.qr, accent: cp.accent, wallpaperKey };
 }
 
 export interface PresignedPost {
@@ -89,10 +110,34 @@ export const api = {
   /** Organizer: edit an event's name / palette / topic buckets (Bearer session). */
   async updateEvent(eventId: string, patch: EventSettings): Promise<EventDTO> {
     if (DEMO || !(await getApiUrl())) return demo.updateEvent(eventId, patch);
+    const body = {
+      ...patch,
+      // Map the custom palette's wallpaper URL → S3 key for the wire (see above).
+      ...(patch.customPalette !== undefined ? { customPalette: toCustomPaletteBody(patch.customPalette) } : {}),
+    };
     return req<EventDTO>(`/events/${eventId}`, {
       method: "PATCH",
-      body: JSON.stringify(patch),
+      body: JSON.stringify(body),
     });
+  },
+
+  /**
+   * Organizer: upload a big-screen wallpaper image for a custom palette. Presigns
+   * an S3 POST, uploads the file, and returns its durable S3 key (the caller pairs
+   * it with a local object URL for preview, and sends the key on save). Bearer
+   * session; owner-only on the backend. In demo mode there's no server key.
+   */
+  async uploadWallpaper(eventId: string, file: File, onProgress?: (pct: number) => void): Promise<string | null> {
+    if (DEMO || !(await getApiUrl())) {
+      onProgress?.(100);
+      return null; // demo: no server round-trip; caller previews via object URL only
+    }
+    const { key, upload } = await req<{ key: string; upload: PresignedPost }>(
+      `/events/${eventId}/wallpaper`,
+      { method: "POST", body: JSON.stringify({ contentType: file.type }) }
+    );
+    await postToS3(upload, file, onProgress);
+    return key;
   },
 
   async getEvent(eventId: string): Promise<EventDTO> {
@@ -160,6 +205,25 @@ export const api = {
       return;
     }
     await req<{ deleted: boolean }>(`/events/${eventId}`, { method: "DELETE" });
+  },
+
+  /** Organizer: delete a single story (metadata + file) (Bearer session). */
+  async deleteVideo(eventId: string, videoId: string): Promise<void> {
+    if (DEMO || !(await getApiUrl())) {
+      demo.deleteVideos(eventId, [videoId]);
+      return;
+    }
+    await req<{ deleted: number }>(`/events/${eventId}/videos/${videoId}`, { method: "DELETE" });
+  },
+
+  /** Organizer: bulk-delete the selected stories. Returns how many were removed. */
+  async deleteVideos(eventId: string, videoIds: string[]): Promise<number> {
+    if (DEMO || !(await getApiUrl())) return demo.deleteVideos(eventId, videoIds);
+    const r = await req<{ deleted: number }>(`/events/${eventId}/videos/delete`, {
+      method: "POST",
+      body: JSON.stringify({ videoIds }),
+    });
+    return r.deleted;
   },
 
   /**

@@ -30,6 +30,9 @@ const backendSrc = path.join(backendDir, "src");
 const backendLock = path.join(backendDir, "package-lock.json");
 
 export interface TomorrowStoriesStackProps extends StackProps {
+  /** Deployment stage: "prod" (default) keeps durable data; any other value
+   *  (e.g. "dev") treats data as disposable so teardown is clean. */
+  stage?: string;
   /** Apex domain (e.g. "tomorrowstories.net"); empty = default CloudFront domain. */
   domainName?: string;
   /** Route 53 hosted zone id for the apex domain (required with domainName). */
@@ -41,6 +44,10 @@ export interface TomorrowStoriesStackProps extends StackProps {
 export class TomorrowStoriesStack extends Stack {
   constructor(scope: Construct, id: string, props?: TomorrowStoriesStackProps) {
     super(scope, id, props);
+
+    // Prod's data is durable (survives redeploys and even `cdk destroy`); a
+    // non-prod stage (dev) is disposable so `cdk destroy` leaves nothing behind.
+    const isProd = (props?.stage || "prod") === "prod";
 
     // Custom-domain mode is active only when the domain, its hosted zone, and a
     // cert are all supplied together; otherwise fall back to *.cloudfront.net.
@@ -55,10 +62,11 @@ export class TomorrowStoriesStack extends Stack {
       partitionKey: { name: "PK", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "SK", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      // Keep event/video metadata across redeploys and even a `cdk destroy`;
-      // PITR adds continuous backups so nothing is lost to an accidental wipe.
-      removalPolicy: RemovalPolicy.RETAIN,
-      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      // Prod: keep event/video metadata across redeploys and even a `cdk destroy`,
+      // with PITR continuous backups. Dev: disposable — DESTROY so teardown is
+      // clean (no orphaned table) and no PITR charge on throwaway data.
+      removalPolicy: isProd ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: isProd },
     });
     // GSI1: owner → their events (GSI1PK=ORG#<ownerId>, GSI1SK=<createdAt>#<id>).
     // Backs "list my events" without a full-table scan. Backfills online.
@@ -303,6 +311,8 @@ export class TomorrowStoriesStack extends Stack {
       [apigw.HttpMethod.POST, "/events/{eventId}/unlock"],
       [apigw.HttpMethod.POST, "/events/{eventId}/uploads"],
       [apigw.HttpMethod.GET, "/events/{eventId}/videos"],
+      [apigw.HttpMethod.POST, "/events/{eventId}/videos/delete"],
+      [apigw.HttpMethod.DELETE, "/events/{eventId}/videos/{videoId}"],
       [apigw.HttpMethod.POST, "/events/{eventId}/videos/{videoId}/like"],
       [apigw.HttpMethod.POST, "/events/{eventId}/videos/{videoId}/comments"],
       [apigw.HttpMethod.GET, "/events/{eventId}/videos/{videoId}/comments"],

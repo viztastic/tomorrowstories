@@ -228,6 +228,35 @@ export async function deleteEvent(
     { PK: eventPK(eventId), SK: "META" },
     { PK: codePK(code), SK: "CODE" },
   ];
+  await batchDelete(keys, `deleteEvent ${eventId}`);
+}
+
+/**
+ * Delete specific videos (and their comments) from an event, leaving the event
+ * itself intact. Used by the organizer's per-story and bulk delete. `videoIds`
+ * and `commentSKs` name the exact rows to remove — the caller resolves which
+ * comments belong to the deleted videos.
+ */
+export async function deleteVideos(
+  eventId: string,
+  videoIds: string[],
+  commentSKs: string[] = []
+): Promise<void> {
+  const keys: Record<string, string>[] = [
+    ...videoIds.map((id) => ({ PK: eventPK(eventId), SK: videoSK(id) })),
+    ...commentSKs.map((sk) => ({ PK: eventPK(eventId), SK: sk })),
+  ];
+  if (!keys.length) return;
+  await batchDelete(keys, `deleteVideos ${eventId}`);
+}
+
+/**
+ * BatchWrite a list of primary keys as DeleteRequests, 25 at a time (the
+ * BatchWrite limit), retrying UnprocessedItems with exponential backoff. Keys
+ * are processed in array order, so callers that need a delete ordering (e.g.
+ * event META last) can rely on it.
+ */
+async function batchDelete(keys: Record<string, string>[], label: string): Promise<void> {
   for (let i = 0; i < keys.length; i += 25) {
     let batch = keys.slice(i, i + 25).map((Key) => ({ DeleteRequest: { Key } }));
     for (let attempt = 0; attempt < 8 && batch.length; attempt++) {
@@ -235,7 +264,7 @@ export async function deleteEvent(
       batch = (res.UnprocessedItems?.[config.tableName] ?? []) as typeof batch;
       if (batch.length) await sleep(2 ** attempt * 50);
     }
-    if (batch.length) throw new Error(`deleteEvent: ${batch.length} item(s) left unprocessed for ${eventId}`);
+    if (batch.length) throw new Error(`${label}: ${batch.length} item(s) left unprocessed`);
   }
 }
 
@@ -247,7 +276,15 @@ export async function deleteEvent(
  */
 export async function updateEvent(
   eventId: string,
-  patch: { name?: string; palette?: string; themes?: EventItem["themes"]; lock?: EventItem["lock"] | null }
+  // customPalette: an object sets it; `null` removes it (event reverts to a
+  // named palette); undefined leaves it untouched. lock: `null` removes it.
+  patch: {
+    name?: string;
+    palette?: string;
+    themes?: EventItem["themes"];
+    customPalette?: EventItem["customPalette"] | null;
+    lock?: EventItem["lock"] | null;
+  }
 ): Promise<EventItem> {
   const sets: string[] = [];
   const removes: string[] = [];
@@ -275,17 +312,20 @@ export async function updateEvent(
     names["#lk"] = "lock";
     values[":lk"] = patch.lock;
   }
-  const expr = [
-    sets.length ? "SET " + sets.join(", ") : "",
-    removes.length ? "REMOVE " + removes.join(", ") : "",
-  ]
+  if (patch.customPalette === null) {
+    removes.push("customPalette");
+  } else if (patch.customPalette !== undefined) {
+    sets.push("customPalette = :cp");
+    values[":cp"] = patch.customPalette;
+  }
+  const clauses = [sets.length ? "SET " + sets.join(", ") : "", removes.length ? "REMOVE " + removes.join(", ") : ""]
     .filter(Boolean)
     .join(" ");
   const res = await doc.send(
     new UpdateCommand({
       TableName: config.tableName,
       Key: { PK: eventPK(eventId), SK: "META" },
-      UpdateExpression: expr,
+      UpdateExpression: clauses,
       ExpressionAttributeNames: Object.keys(names).length ? names : undefined,
       ExpressionAttributeValues: Object.keys(values).length ? values : undefined,
       ConditionExpression: "attribute_exists(PK)",
