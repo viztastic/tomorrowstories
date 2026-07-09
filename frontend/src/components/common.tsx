@@ -50,14 +50,24 @@ export function Spinner({ size = 22, color = "currentColor" }: { size?: number; 
 }
 
 /** Real, scannable QR code for the attendee URL. */
-export function Qr({ value, size = 150 }: { value: string; size?: number }) {
+export function Qr({
+  value,
+  size = 150,
+  dark = "#0C0A12",
+  light = "#F4F1EC",
+}: {
+  value: string;
+  size?: number;
+  dark?: string; // module (foreground) color
+  light?: string; // background color
+}) {
   const [src, setSrc] = useState<string>("");
   useEffect(() => {
     let alive = true;
     QRCode.toDataURL(value, {
       margin: 1,
       width: size * 2,
-      color: { dark: "#0C0A12", light: "#F4F1EC" },
+      color: { dark, light },
       errorCorrectionLevel: "M",
     })
       .then((url) => alive && setSrc(url))
@@ -65,7 +75,7 @@ export function Qr({ value, size = 150 }: { value: string; size?: number }) {
     return () => {
       alive = false;
     };
-  }, [value, size]);
+  }, [value, size, dark, light]);
   return src ? (
     <img src={src} width={size} height={size} alt="Scan to upload" style={{ display: "block", borderRadius: 6 }} />
   ) : (

@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { Theme, VideoDTO } from "../../types";
 import { ACCENT, BRAND_GRAD, DANGER, DANGER_INK, FONT_DISPLAY, INK, MUTED, MUTED2, ON_ACCENT, PAGE_BG, STAGE_BG, pairFor, stillBg, themeById } from "../../design";
-import { PaletteProvider } from "../../PaletteProvider";
+import { PaletteProvider, usePalette } from "../../PaletteProvider";
 import { Grain, Qr, Spinner } from "../common";
 import { Thumb, VideoCard } from "../attendee/VideoCard";
 import { useEventData } from "../../useEventData";
@@ -124,13 +124,8 @@ function OrganizerPanel({
       <div style={shareCard}>
         <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 800, fontSize: 19, letterSpacing: "-.01em" }}>Get stories on the wall</div>
         <div style={{ fontSize: 13, color: MUTED, marginTop: 6, lineHeight: 1.45 }}>Show this QR, or share the link. Anyone who scans can post a 60-second story.</div>
-        <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
-          <div style={{ background: "#F4F1EC", borderRadius: 18, padding: 16 }}>
-            <Qr value={event.attendeeUrl} size={200} />
-          </div>
-        </div>
         <div style={{ marginTop: 18 }}>
-          <EventCode code={event.code} size={46} align="center" />
+          <CredentialBlock attendeeUrl={event.attendeeUrl} code={event.code} qrSize={200} codeSize={46} align="center" />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
           <button onClick={copy} style={secondaryBtn}>{copied ? "Link copied ✓" : "Copy attendee link"}</button>
@@ -330,11 +325,8 @@ function Projector({
           <div style={{ fontSize: 14, color: "#9E99AD", fontWeight: 500, marginTop: 10, lineHeight: 1.45 }}>
             Scan to record from your phone. It appears here in seconds.
           </div>
-          <div style={{ marginTop: 22, background: "#F4F1EC", borderRadius: 18, padding: 16, alignSelf: "flex-start" }}>
-            <Qr value={event.attendeeUrl} size={150} />
-          </div>
-          <div style={{ marginTop: 18 }}>
-            <EventCode code={event.code} size={40} align="left" />
+          <div style={{ marginTop: 22 }}>
+            <CredentialBlock attendeeUrl={event.attendeeUrl} code={event.code} qrSize={150} codeSize={40} align="left" />
           </div>
           <div style={{ marginTop: "auto", paddingTop: 22 }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".08em", color: MUTED2, marginBottom: 12 }}>TRENDING THEMES</div>
@@ -506,12 +498,62 @@ function PlaceholderCard({ pair }: { pair: [string, string] }) {
   );
 }
 
-/** Prominent, classy event-code display — the type-it-in alternative to the QR. */
-function EventCode({ code, size, align = "left" }: { code: string; size: number; align?: "left" | "center" }) {
+/**
+ * The QR + event-code "credential" block shared by the desktop sidebar and the
+ * mobile share card. Most palettes render it bare (QR on its own light tile, code
+ * in the normal ink); a palette with a qrPanelBg wraps it in a solid card and
+ * recolors the QR (qrDark/qrLight) and code text (qrPanelInk) to match — e.g.
+ * Beacon's white-on-red QR on a red card.
+ */
+function CredentialBlock({
+  attendeeUrl,
+  code,
+  qrSize,
+  codeSize,
+  align,
+}: {
+  attendeeUrl: string;
+  code: string;
+  qrSize: number;
+  codeSize: number;
+  align: "left" | "center";
+}) {
+  const pal = usePalette();
+  const framed = pal.qrPanelBg !== "transparent";
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: align === "center" ? "center" : "flex-start",
+        background: framed ? pal.qrPanelBg : undefined,
+        borderRadius: framed ? 22 : 0,
+        padding: framed ? 22 : 0,
+      }}
+    >
+      <div style={{ background: pal.qrLight, borderRadius: 18, padding: 16 }}>
+        <Qr value={attendeeUrl} size={qrSize} dark={pal.qrDark} light={pal.qrLight} />
+      </div>
+      <div style={{ marginTop: 18, alignSelf: "stretch" }}>
+        <EventCode code={code} size={codeSize} align={align} onColor={framed ? pal.qrPanelInk : undefined} />
+      </div>
+    </div>
+  );
+}
+
+/** Prominent, classy event-code display — the type-it-in alternative to the QR.
+ *  onColor overrides the text tint when the code sits on a solid card (e.g. white
+ *  on Beacon's red panel); otherwise it uses the palette's normal ink/muted vars. */
+function EventCode({ code, size, align = "left", onColor }: { code: string; size: number; align?: "left" | "center"; onColor?: string }) {
   const host = typeof window !== "undefined" ? window.location.host : "";
+  const codeColor = onColor ?? INK;
+  // On a saturated card the muted labels read as translucent white; qrPanelInk is
+  // white for the only palette that sets it, so white-alpha is the right derive.
+  const labelColor = onColor ? "rgba(255,255,255,.72)" : MUTED2;
+  const subColor = onColor ? "rgba(255,255,255,.82)" : MUTED;
   return (
     <div style={{ textAlign: align }}>
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".16em", color: MUTED2 }}>OR ENTER CODE</div>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".16em", color: labelColor }}>OR ENTER CODE</div>
       <div
         style={{
           fontFamily: FONT_DISPLAY,
@@ -520,12 +562,12 @@ function EventCode({ code, size, align = "left" }: { code: string; size: number;
           letterSpacing: ".06em",
           lineHeight: 1,
           marginTop: 8,
-          color: INK,
+          color: codeColor,
         }}
       >
         {code}
       </div>
-      <div style={{ fontSize: 12.5, color: MUTED, marginTop: 8, fontWeight: 600 }}>
+      <div style={{ fontSize: 12.5, color: subColor, marginTop: 8, fontWeight: 600 }}>
         at {host}/join
       </div>
     </div>

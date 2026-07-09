@@ -33,6 +33,15 @@ export interface Palette {
   headerBg: string; // sticky header / bottom-nav frosted background
   chipOn: string; // active tab/filter chip background
   chipOnInk: string; // text on an active chip
+  // Big-screen QR/event-code "credential" block. Most palettes leave qrPanelBg
+  // transparent — the QR sits on its own light tile (qrLight) and the code below
+  // it uses the normal ink colors. A palette can instead give the block a solid
+  // card (qrPanelBg) with its own text tint (qrPanelInk) and recolor the QR
+  // itself (qrDark = module color, qrLight = QR background / tile fill).
+  qrPanelBg: string; // fill behind the QR + event code block ("transparent" = none)
+  qrPanelInk: string; // text color for the event code when qrPanelBg is set
+  qrDark: string; // QR module (foreground) color
+  qrLight: string; // QR background + surrounding tile fill
 }
 
 export const DEFAULT_PALETTE_ID = "aurora";
@@ -60,6 +69,10 @@ export const PALETTES: Record<string, Palette> = {
     headerBg: "rgba(12,16,36,.72)",
     chipOn: "#F4F1EC",
     chipOnInk: "#0C0A12",
+    qrPanelBg: "transparent",
+    qrPanelInk: "#F4F1EC",
+    qrDark: "#0C0A12",
+    qrLight: "#F4F1EC",
   },
   // Bold civic energy in a LIGHT layout — white dominant, red the hero accent,
   // yellow on the active chips. Inspired by the YMCA World Council palette.
@@ -84,6 +97,10 @@ export const PALETTES: Record<string, Palette> = {
     headerBg: "rgba(255,255,255,.85)",
     chipOn: "#F5C400", // yellow active chips (the second accent)
     chipOnInk: "#17181C",
+    qrPanelBg: "transparent",
+    qrPanelInk: "#17181C",
+    qrDark: "#0C0A12",
+    qrLight: "#F4F1EC",
   },
   // Cool deep-ocean blue.
   marine: {
@@ -107,6 +124,40 @@ export const PALETTES: Record<string, Palette> = {
     headerBg: "rgba(4,18,31,.72)",
     chipOn: "#EAF6FF",
     chipOnInk: "#04121F",
+    qrPanelBg: "transparent",
+    qrPanelInk: "#EAF6FF",
+    qrDark: "#0C0A12",
+    qrLight: "#F4F1EC",
+  },
+  // Warm civic gold in a LIGHT layout — a #E3C166 yellow wall with #AD2923 brick
+  // red as the hero accent. On the big screen the QR + event code sit on a solid
+  // red card with a white (inverted) QR and white text, per the event brief.
+  beacon: {
+    id: "beacon",
+    name: "Beacon",
+    accent: "#AD2923", // brick red — links, dots, active states (reads on yellow)
+    brandGrad: "linear-gradient(135deg, #AD2923, #8E1F17)", // solid red buttons, white text
+    ink: "#2E1A0B", // deep warm brown, strong contrast on gold
+    muted: "#6E4A22",
+    muted2: "#8A6A38",
+    panel: "rgba(46,26,11,.06)",
+    hairline: "rgba(46,26,11,.14)",
+    pageBg: "radial-gradient(1200px 700px at 50% -10%, #EBD07A, #E3C166 92%)",
+    bodyBg: "#E3C166",
+    // White stage so the stories + QR card pop against the gold page frame.
+    stageBg: "radial-gradient(120% 100% at 50% 0%, #FFFFFF, #F7F3EA)",
+    overlayBg: "#E3C166",
+    danger: "#AD2923",
+    dangerInk: "#8E1F17", // red readable on gold
+    onAccent: "#FFFFFF", // white text on a solid red topic chip
+    neutralRgb: "46,26,11", // warm near-black → brown-tinted neutral surfaces on gold
+    headerBg: "rgba(227,193,102,.85)",
+    chipOn: "#AD2923", // red active chips
+    chipOnInk: "#FFFFFF",
+    qrPanelBg: "#AD2923", // red card behind the QR + event code
+    qrPanelInk: "#FFFFFF", // white event code text on the red card
+    qrDark: "#FFFFFF", // white QR modules…
+    qrLight: "#AD2923", // …on red, so the QR reads as white-on-red
   },
 };
 
@@ -137,6 +188,10 @@ const VAR_NAMES: Record<keyof Omit<Palette, "id" | "name">, string> = {
   headerBg: "--ts-header-bg",
   chipOn: "--ts-chip-on",
   chipOnInk: "--ts-chip-on-ink",
+  qrPanelBg: "--ts-qr-panel-bg",
+  qrPanelInk: "--ts-qr-panel-ink",
+  qrDark: "--ts-qr-dark",
+  qrLight: "--ts-qr-light",
 };
 
 /** { "--ts-accent": "#FF6B35", … } for a palette — what PaletteProvider writes to :root. */

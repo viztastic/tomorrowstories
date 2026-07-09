@@ -46,5 +46,5 @@ export const DEFAULT_THEMES = [
 // attendee UI). The backend only stores/validates the id — the actual colors
 // live in the frontend registry (frontend/src/palettes.ts). Keep these ids in
 // sync with that file's PALETTES keys.
-export const PALETTE_IDS = ["aurora", "rally", "marine"];
+export const PALETTE_IDS = ["aurora", "rally", "marine", "beacon"];
 export const DEFAULT_PALETTE_ID = "aurora";
